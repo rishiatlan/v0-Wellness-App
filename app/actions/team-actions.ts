@@ -826,10 +826,10 @@ export async function getAllTeamsWithMembers() {
   const serviceClient = createServiceRoleClient()
 
   try {
-    // Get all teams
+    // Get all teams - don't select creator_id since it might not exist yet
     const { data: teams, error } = await serviceClient
       .from("teams")
-      .select("id, name, banner_url, total_points, creator_id")
+      .select("id, name, banner_url, total_points")
       .order("total_points", { ascending: false })
 
     if (error) throw error
@@ -848,8 +848,15 @@ export async function getAllTeamsWithMembers() {
 
         if (membersError) throw membersError
 
+        // Try to find the creator (first member) if creator_id doesn't exist
+        let creator_id = null
+        if (members && members.length > 0) {
+          creator_id = members[0].id // Use first member as fallback creator
+        }
+
         return {
           ...team,
+          creator_id, // Add creator_id from our calculation
           members: members || [],
           memberCount: members?.length || 0,
         }

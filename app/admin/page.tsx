@@ -18,6 +18,7 @@ import {
   Shield,
   RefreshCw,
   Trash2,
+  UserCog,
   CheckCircle,
   Search,
   Plus,
@@ -50,6 +51,7 @@ import {
   checkIsAdmin,
   addUser,
 } from "@/app/actions/admin-actions"
+import { TeamDetails } from "@/app/team-challenge/team-details"
 
 export default function AdminDashboard() {
   const { user } = useAuth()
@@ -1000,7 +1002,309 @@ export default function AdminDashboard() {
           </Card>
         </TabsContent>
 
-        {/* Rest of the component remains the same */}
+        <TabsContent value="teams">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <div>
+                <CardTitle>Team Management</CardTitle>
+                <CardDescription>View and manage teams in the system</CardDescription>
+              </div>
+              <Button onClick={handleCreateTeam} disabled={actionInProgress === "create-team"} className="ml-auto">
+                {actionInProgress === "create-team" ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Plus className="mr-2 h-4 w-4" />
+                )}
+                {actionInProgress === "create-team" ? "Creating..." : "Create Team"}
+              </Button>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-4 py-4">
+                <div className="grid gap-2">
+                  <label htmlFor="teamName" className="text-sm font-medium">
+                    Team Name
+                  </label>
+                  <Input
+                    id="teamName"
+                    placeholder="Team Awesome"
+                    value={newTeamName}
+                    onChange={(e) => setNewTeamName(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-12">
+                        <Checkbox
+                          checked={selectedTeams.length === filteredTeams.length && filteredTeams.length > 0}
+                          onCheckedChange={(checked) => {
+                            if (checked) {
+                              setSelectedTeams(filteredTeams.map((team) => team.id))
+                            } else {
+                              setSelectedTeams([])
+                            }
+                          }}
+                        />
+                      </TableHead>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Points</TableHead>
+                      <TableHead>Members</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredTeams.length > 0 ? (
+                      filteredTeams.map((team) => (
+                        <TableRow key={team.id}>
+                          <TableCell>
+                            <Checkbox
+                              checked={selectedTeams.includes(team.id)}
+                              onCheckedChange={() => handleToggleTeamSelection(team.id)}
+                            />
+                          </TableCell>
+                          <TableCell className="font-medium">{team.name}</TableCell>
+                          <TableCell>{team.total_points}</TableCell>
+                          <TableCell>{team.member_count}</TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-2">
+                              <Button variant="secondary" size="sm" onClick={() => handleSelectTeamDetails(team)}>
+                                Details
+                              </Button>
+                              <Dialog>
+                                <DialogTrigger asChild>
+                                  <Button variant="outline" size="sm">
+                                    <UserX className="h-4 w-4 mr-1" />
+                                    Reset
+                                  </Button>
+                                </DialogTrigger>
+                                <DialogContent>
+                                  <DialogHeader>
+                                    <DialogTitle>Reset Team</DialogTitle>
+                                    <DialogDescription>
+                                      Are you sure you want to reset this team? This will reset the team's points and
+                                      remove all users from the team.
+                                    </DialogDescription>
+                                  </DialogHeader>
+                                  <div className="py-4">
+                                    <p>
+                                      <strong>Name:</strong> {team.name}
+                                    </p>
+                                  </div>
+                                  <DialogFooter>
+                                    <Button
+                                      variant="destructive"
+                                      onClick={() => handleResetTeam(team.id)}
+                                      disabled={actionInProgress === `reset-team-${team.id}`}
+                                    >
+                                      {actionInProgress === `reset-team-${team.id}` ? (
+                                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                      ) : null}
+                                      {actionInProgress === `reset-team-${team.id}` ? "Resetting..." : "Reset Team"}
+                                    </Button>
+                                  </DialogFooter>
+                                </DialogContent>
+                              </Dialog>
+                              <Dialog>
+                                <DialogTrigger asChild>
+                                  <Button variant="destructive" size="sm">
+                                    <Trash2 className="h-4 w-4 mr-1" />
+                                    Delete
+                                  </Button>
+                                </DialogTrigger>
+                                <DialogContent>
+                                  <DialogHeader>
+                                    <DialogTitle>Delete Team</DialogTitle>
+                                    <DialogDescription>
+                                      Are you sure you want to delete this team? This action cannot be undone.
+                                    </DialogDescription>
+                                  </DialogHeader>
+                                  <div className="py-4">
+                                    <p>
+                                      <strong>Name:</strong> {team.name}
+                                    </p>
+                                  </div>
+                                  <DialogFooter>
+                                    <Button
+                                      variant="destructive"
+                                      onClick={() => handleDeleteTeam(team.id)}
+                                      disabled={actionInProgress === `delete-team-${team.id}`}
+                                    >
+                                      {actionInProgress === `delete-team-${team.id}` ? (
+                                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                      ) : null}
+                                      {actionInProgress === `delete-team-${team.id}` ? "Deleting..." : "Delete Team"}
+                                    </Button>
+                                  </DialogFooter>
+                                </DialogContent>
+                              </Dialog>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                          {searchQuery ? "No teams found matching your search" : "No teams found"}
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="team-management">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <div>
+                <CardTitle>Team Management</CardTitle>
+                <CardDescription>Add or remove users from teams</CardDescription>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-4 py-4">
+                <div className="grid gap-2">
+                  <label htmlFor="user" className="text-sm font-medium">
+                    User
+                  </label>
+                  <Select value={selectedUserForTeam} onValueChange={setSelectedUserForTeam}>
+                    <SelectTrigger className="w-[180px]">
+                      <SelectValue placeholder="Select a user" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {users.map((user) => (
+                        <SelectItem key={user.id} value={user.id}>
+                          {user.full_name || user.email}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid gap-2">
+                  <label htmlFor="team" className="text-sm font-medium">
+                    Team
+                  </label>
+                  <Select value={selectedTeamForUser} onValueChange={setSelectedTeamForUser}>
+                    <SelectTrigger className="w-[180px]">
+                      <SelectValue placeholder="Select a team" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {teams.map((team) => (
+                        <SelectItem key={team.id} value={team.id}>
+                          {team.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button onClick={handleAddUserToTeam} disabled={actionInProgress === "add-user-to-team"}>
+                  {actionInProgress === "add-user-to-team" ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <UserPlus className="mr-2 h-4 w-4" />
+                  )}
+                  {actionInProgress === "add-user-to-team" ? "Adding..." : "Add User to Team"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="admins">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <div>
+                <CardTitle>Admin Management</CardTitle>
+                <CardDescription>Add or remove admins</CardDescription>
+              </div>
+              <Button onClick={handleAddAdmin} disabled={actionInProgress === "add-admin"} className="ml-auto">
+                {actionInProgress === "add-admin" ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Shield className="mr-2 h-4 w-4" />
+                )}
+                {actionInProgress === "add-admin" ? "Adding..." : "Add Admin"}
+              </Button>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-4 py-4">
+                <div className="grid gap-2">
+                  <label htmlFor="adminEmail" className="text-sm font-medium">
+                    Admin Email
+                  </label>
+                  <Input
+                    id="adminEmail"
+                    placeholder="admin@example.com"
+                    value={newAdminEmail}
+                    onChange={(e) => setNewAdminEmail(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Email</TableHead>
+                      <TableHead className="text-center">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {admins.length > 0 ? (
+                      admins.map((admin) => (
+                        <TableRow key={admin}>
+                          <TableCell className="font-medium">{admin}</TableCell>
+                          <TableCell className="text-center">
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              onClick={() => handleToggleAdminStatus(admin, true)}
+                              disabled={actionInProgress === `toggle-admin-${admin}`}
+                            >
+                              {actionInProgress === `toggle-admin-${admin}` ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <UserCog className="h-4 w-4 mr-1" />
+                              )}
+                              Remove Admin
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={2} className="text-center py-8 text-muted-foreground">
+                          No admins found
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="team-details">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <div>
+                <CardTitle>Team Details</CardTitle>
+                <CardDescription>View details for a selected team</CardDescription>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {selectedTeamDetails ? (
+                <TeamDetails team={selectedTeamDetails} />
+              ) : (
+                <p className="text-muted-foreground">Select a team to view details</p>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
     </div>
   )

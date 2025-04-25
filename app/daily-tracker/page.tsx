@@ -758,12 +758,22 @@ export default function DailyTracker() {
 
       // Optimistically update the UI
       setActivities((prevActivities) => {
-        return prevActivities.map((a) => {
+        const updatedActivities = prevActivities.map((a) => {
           if (a.id === activity.id) {
             return { ...a, completed: true }
           }
           return a
         })
+
+        // Recalculate today's points with the updated activities
+        const newPoints = updatedActivities.reduce((sum, act) => {
+          return sum + (act.completed ? act.points : 0)
+        }, 0)
+
+        console.log(`Recalculated points after toggle: ${newPoints}`)
+        setTodayPoints(newPoints)
+
+        return updatedActivities
       })
 
       // Call the server action directly for more reliable logging
@@ -835,12 +845,22 @@ export default function DailyTracker() {
 
       // Revert the UI change if there was an error
       setActivities((prevActivities) => {
-        return prevActivities.map((a) => {
+        const revertedActivities = prevActivities.map((a) => {
           if (a.id === activity.id) {
             return originalActivity // Restore original activity state
           }
           return a
         })
+
+        // Recalculate today's points after reverting
+        const revertedPoints = revertedActivities.reduce((sum, act) => {
+          return sum + (act.completed ? act.points : 0)
+        }, 0)
+
+        console.log(`Reverted points calculation: ${revertedPoints}`)
+        setTodayPoints(revertedPoints)
+
+        return revertedActivities
       })
 
       // Show appropriate error message
@@ -884,7 +904,7 @@ export default function DailyTracker() {
           <AlertDescription>{error}</AlertDescription>
         </Alert>
         <div className="text-center">
-          <Button onClick={handleRetry}>Retry</Button>
+          <Button onClick={() => window.location.reload()}>Retry</Button>
         </div>
       </div>
     )

@@ -121,7 +121,7 @@ export async function getUserMonthlyStats(userId: string, month: number, year: n
   }
 }
 
-// Fix the getRecentActivityHistory function to ensure all days are included
+// Fix the getRecentActivityHistory function to ensure all days are included and sort in descending order
 export async function getRecentActivityHistory(userId: string, days = 14) {
   const cookieStore = cookies()
   const supabase = createServerClient(
@@ -150,14 +150,14 @@ export async function getRecentActivityHistory(userId: string, days = 14) {
 
     console.log(`Fetching activity history for user ${userId} from ${startDateStr} to ${endDateStr}`)
 
-    // Get all daily logs for the date range
+    // Get all daily logs for the date range, now ordering by log_date in descending order
     const { data, error } = await serviceClient
       .from("daily_logs")
       .select("*, activities(name, emoji, points)")
       .eq("user_id", userId)
       .gte("log_date", startDateStr)
       .lte("log_date", endDateStr)
-      .order("log_date", { ascending: false })
+      .order("log_date", { ascending: false }) // Changed to descending order (latest first)
 
     if (error) {
       console.error("Error fetching activity history:", error)
@@ -170,7 +170,8 @@ export async function getRecentActivityHistory(userId: string, days = 14) {
     const groupedLogs: Record<string, any[]> = {}
 
     // First, create entries for all days in the range (to ensure no missing days)
-    for (let d = new Date(startDateStr); d <= endDate; d.setDate(d.getDate() + 1)) {
+    // We'll create them in descending order to match our query
+    for (let d = new Date(endDateStr); d >= new Date(startDateStr); d.setDate(d.getDate() - 1)) {
       const dateStr = d.toISOString().split("T")[0]
       groupedLogs[dateStr] = []
     }

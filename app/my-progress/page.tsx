@@ -107,7 +107,7 @@ export default function MyProgress() {
   const tiers = [
     {
       name: "Getting Started",
-      emoji: "🌱",
+      emoji: "🌟", // Changed from 🌱 to 🌟 for the Getting Started tier
       min: 0,
       max: 639,
       color: "bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-300",
@@ -245,7 +245,7 @@ export default function MyProgress() {
                 </div>
                 <div className="rounded-lg bg-emerald-50 p-4 text-center dark:bg-emerald-900/20">
                   <div className="text-2xl font-bold text-emerald-700 dark:text-emerald-300">
-                    {currentTier === 0 ? "🌱" : currentTier === 1 ? "🌱" : currentTier === 2 ? "🌿" : "🌳"}
+                    {currentTier === 0 ? "🌟" : currentTier === 1 ? "🌱" : currentTier === 2 ? "🌿" : "🌳"}
                   </div>
                   <div className="text-sm text-emerald-700 dark:text-emerald-300">Current Tier</div>
                 </div>
