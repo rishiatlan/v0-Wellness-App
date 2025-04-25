@@ -8,7 +8,7 @@ import { createClient } from "@supabase/supabase-js"
 // Update the INITIAL_ADMIN_EMAILS array to include your email if needed
 
 // List of admin emails for initial setup
-const INITIAL_ADMIN_EMAILS = ["rishi.banerjee@atlan.com", "steven.hloros@atlan.com", "sucharita.tuer@atlan.com"]
+export const INITIAL_ADMIN_EMAILS = ["rishi.banerjee@atlan.com", "steven.hloros@atlan.com", "sucharita.tuer@atlan.com"]
 
 /**
  * Checks if a user is an admin based on their email
@@ -17,7 +17,8 @@ export function isAdmin(email: string | null | undefined): boolean {
   if (!email) return false
 
   // First check the initial list (for first-time setup)
-  if (INITIAL_ADMIN_EMAILS.includes(email.toLowerCase())) {
+  if (INITIAL_ADMIN_EMAILS.some((adminEmail) => adminEmail.toLowerCase() === email.toLowerCase())) {
+    console.log("User is in INITIAL_ADMIN_EMAILS:", email)
     return true
   }
 
@@ -26,7 +27,11 @@ export function isAdmin(email: string | null | undefined): boolean {
     const cachedAdmins = localStorage.getItem("admin_emails")
     if (cachedAdmins) {
       const adminList = JSON.parse(cachedAdmins)
-      return adminList.includes(email.toLowerCase())
+      const isInCachedList = adminList.some((adminEmail: string) => adminEmail.toLowerCase() === email.toLowerCase())
+      if (isInCachedList) {
+        console.log("User is in cached admin list:", email)
+        return true
+      }
     }
   } catch (error) {
     console.error("Error checking cached admin list:", error)
@@ -57,7 +62,7 @@ export function useAdminUsers() {
         const adminEmails = data?.map((item) => item.email.toLowerCase()) || []
 
         // Include the initial admins
-        const allAdmins = [...new Set([...INITIAL_ADMIN_EMAILS, ...adminEmails])]
+        const allAdmins = [...new Set([...INITIAL_ADMIN_EMAILS.map((email) => email.toLowerCase()), ...adminEmails])]
 
         setAdmins(allAdmins)
 
@@ -72,7 +77,7 @@ export function useAdminUsers() {
         setError(err.message)
 
         // Fallback to initial list
-        setAdmins(INITIAL_ADMIN_EMAILS)
+        setAdmins(INITIAL_ADMIN_EMAILS.map((email) => email.toLowerCase()))
       } finally {
         setLoading(false)
       }
@@ -99,7 +104,7 @@ export function getAdminsClient(): string[] {
   }
 
   // Fallback to initial list
-  return [...INITIAL_ADMIN_EMAILS]
+  return [...INITIAL_ADMIN_EMAILS.map((email) => email.toLowerCase())]
 }
 
 export function createServiceRoleClient() {

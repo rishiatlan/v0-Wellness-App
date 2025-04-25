@@ -4,7 +4,9 @@ import { createServiceRoleClient } from "@/lib/server-auth"
 import { revalidatePath } from "next/cache"
 import { cookies } from "next/headers"
 import { createClient } from "@/lib/supabase/server"
-import { createServiceRoleClient as createServiceRoleClientAdmin } from "@/lib/admin-utils"
+
+// Make sure to import INITIAL_ADMIN_EMAILS at the top of the file
+import { INITIAL_ADMIN_EMAILS } from "@/lib/admin-utils"
 
 export async function getCurrentUser() {
   const cookieStore = cookies()
@@ -23,6 +25,7 @@ export async function getCurrentUser() {
   return session.user
 }
 
+// Update the verifyAdmin function with more detailed logging and robust checks
 export async function verifyAdmin() {
   const user = await getCurrentUser()
 
@@ -31,19 +34,65 @@ export async function verifyAdmin() {
     return false
   }
 
+  console.log("Checking admin status for:", user.email)
+
+  // First check if user is in INITIAL_ADMIN_EMAILS
+  const isInitialAdmin = INITIAL_ADMIN_EMAILS.some(
+    (adminEmail) => adminEmail.toLowerCase() === user.email?.toLowerCase(),
+  )
+
+  if (isInitialAdmin) {
+    console.log("User is in INITIAL_ADMIN_EMAILS:", user.email)
+    return true
+  }
+
   // Use the service role client to bypass RLS
-  const supabaseAdmin = createServiceRoleClientAdmin()
+  const serviceClient = createServiceRoleClient()
 
   try {
-    // Direct query to admin_users table
-    const { data, error } = await supabaseAdmin.from("admin_users").select("*").eq("email", user.email).single()
+    // Try direct SQL query first for most reliable results
+    const { data: sqlResult, error: sqlError } = await serviceClient.rpc("execute_sql", {
+      sql_query: `SELECT * FROM admin_users WHERE LOWER(email) = LOWER('${user.email}')`,
+    })
+
+    if (sqlError) {
+      console.error("SQL query error:", sqlError)
+    } else if (sqlResult && sqlResult.length > 0) {
+      console.log("User found in admin_users via SQL query:", user.email)
+      return true
+    }
+
+    // Try the is_admin function if available
+    try {
+      const { data: isAdminResult, error: isAdminError } = await serviceClient.rpc("is_admin", {
+        user_email: user.email,
+      })
+
+      if (isAdminError) {
+        console.error("is_admin function error:", isAdminError)
+      } else if (isAdminResult) {
+        console.log("User is admin according to is_admin function:", user.email)
+        return true
+      }
+    } catch (functionError) {
+      console.error("Error calling is_admin function:", functionError)
+    }
+
+    // Fallback to direct query with case-insensitive comparison
+    const { data, error } = await serviceClient.from("admin_users").select("*").ilike("email", user.email).maybeSingle()
 
     if (error) {
       console.error("Admin verification error:", error)
       return false
     }
 
-    return !!data
+    if (data) {
+      console.log("User found in admin_users via ilike query:", user.email)
+      return true
+    }
+
+    console.log("User is not an admin:", user.email)
+    return false
   } catch (error) {
     console.error("Admin verification exception:", error)
     return false
