@@ -74,6 +74,8 @@ export async function getUserActivityHistory(userId: string, month: number, year
   return logsByDate
 }
 
+// Fix the getUserMonthlyStats function to ensure it correctly calculates the stats
+
 export async function getUserMonthlyStats(userId: string, month: number, year: number) {
   const cookieStore = cookies()
   const supabase = createServerClient(
@@ -88,40 +90,64 @@ export async function getUserMonthlyStats(userId: string, month: number, year: n
     },
   )
 
-  // Calculate the first and last day of the month
-  const startDate = new Date(year, month - 1, 1).toISOString().split("T")[0]
-  const endDate = new Date(year, month, 0).toISOString().split("T")[0]
+  // Use service role client for more reliable data access
+  const serviceClient = createServiceRoleClient()
 
-  // Get all daily logs for the user in the specified month
-  const { data, error } = await supabase
-    .from("daily_logs")
-    .select("log_date, points")
-    .eq("user_id", userId)
-    .gte("log_date", startDate)
-    .lte("log_date", endDate)
+  try {
+    // Calculate the first and last day of the month
+    const startDate = new Date(year, month - 1, 1).toISOString().split("T")[0]
+    const endDate = new Date(year, month, 0).toISOString().split("T")[0]
 
-  if (error) throw error
+    console.log(`Fetching monthly stats for user ${userId} from ${startDate} to ${endDate}`)
 
-  // Calculate stats
-  const totalDaysLogged = new Set(data.map((log) => log.log_date)).size
-  const totalPoints = data.reduce((sum, log) => sum + log.points, 0)
-  const perfectDays = Object.values(
-    data.reduce((acc: Record<string, number>, log) => {
-      if (!acc[log.log_date]) acc[log.log_date] = 0
-      acc[log.log_date] += log.points
+    // Get all daily logs for the user in the specified month
+    const { data, error } = await serviceClient
+      .from("daily_logs")
+      .select("log_date, points")
+      .eq("user_id", userId)
+      .gte("log_date", startDate)
+      .lte("log_date", endDate)
+
+    if (error) throw error
+
+    console.log(`Found ${data.length} logs for the month`)
+
+    // Group logs by date to calculate unique days and points per day
+    const logsByDate = data.reduce((acc: Record<string, number[]>, log) => {
+      if (!acc[log.log_date]) {
+        acc[log.log_date] = []
+      }
+      acc[log.log_date].push(log.points)
       return acc
-    }, {}),
-  ).filter((points) => points === 30).length
+    }, {})
 
-  return {
-    totalDaysLogged,
-    totalPoints,
-    perfectDays,
-    daysInMonth: new Date(year, month, 0).getDate(),
+    // Calculate stats
+    const totalDaysLogged = Object.keys(logsByDate).length
+    const totalPoints = data.reduce((sum, log) => sum + log.points, 0)
+
+    // Count perfect days (days with exactly 30 points)
+    const perfectDays = Object.values(logsByDate).filter(
+      (pointsArray) => pointsArray.reduce((sum, points) => sum + points, 0) === 30,
+    ).length
+
+    console.log(
+      `Stats calculated: ${totalDaysLogged} days logged, ${perfectDays} perfect days, ${totalPoints} total points`,
+    )
+
+    return {
+      totalDaysLogged,
+      totalPoints,
+      perfectDays,
+      daysInMonth: new Date(year, month, 0).getDate(),
+    }
+  } catch (error) {
+    console.error("Error calculating monthly stats:", error)
+    throw error
   }
 }
 
-// Fix the getRecentActivityHistory function to ensure all days are included and sort in descending order
+// Update the getRecentActivityHistory function to sort activities in descending order (latest first)
+
 export async function getRecentActivityHistory(userId: string, days = 14) {
   const cookieStore = cookies()
   const supabase = createServerClient(
@@ -150,7 +176,7 @@ export async function getRecentActivityHistory(userId: string, days = 14) {
 
     console.log(`Fetching activity history for user ${userId} from ${startDateStr} to ${endDateStr}`)
 
-    // Get all daily logs for the date range, now ordering by log_date in descending order
+    // Get all daily logs for the date range - SORT IN DESCENDING ORDER
     const { data, error } = await serviceClient
       .from("daily_logs")
       .select("*, activities(name, emoji, points)")
@@ -170,8 +196,7 @@ export async function getRecentActivityHistory(userId: string, days = 14) {
     const groupedLogs: Record<string, any[]> = {}
 
     // First, create entries for all days in the range (to ensure no missing days)
-    // We'll create them in descending order to match our query
-    for (let d = new Date(endDateStr); d >= new Date(startDateStr); d.setDate(d.getDate() - 1)) {
+    for (let d = new Date(startDateStr); d <= endDate; d.setDate(d.getDate() + 1)) {
       const dateStr = d.toISOString().split("T")[0]
       groupedLogs[dateStr] = []
     }

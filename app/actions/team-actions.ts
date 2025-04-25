@@ -125,6 +125,7 @@ export async function getUserTeam(userId: string) {
   }
 }
 
+// Update the createTeam function to enforce a maximum of 5 members per team
 export async function createTeam(userId: string, teamName: string, bannerUrl?: string) {
   const cookieStore = cookies()
   const supabase = createServerClient(
@@ -210,6 +211,7 @@ export async function createTeam(userId: string, teamName: string, bannerUrl?: s
   }
 }
 
+// Update the joinTeam function to enforce a maximum of 5 members per team
 export async function joinTeam(userId: string, teamId: string) {
   const cookieStore = cookies()
   const supabase = createServerClient(
@@ -870,6 +872,7 @@ export async function getAllTeamsWithMembers() {
   }
 }
 
+// Update the sendTeamInvite function to enforce a maximum of 5 members per team
 export async function sendTeamInvite(teamId: string, inviterUserId: string, inviteeEmail: string) {
   const serviceClient = createServiceRoleClient()
 
@@ -883,7 +886,7 @@ export async function sendTeamInvite(teamId: string, inviterUserId: string, invi
       return { success: false, error: "Team not found" }
     }
 
-    // Check if team is full
+    // Check if team is full (5 members max)
     const { count: memberCount, error: countError } = await serviceClient
       .from("users")
       .select("id", { count: "exact" })
@@ -920,10 +923,6 @@ export async function sendTeamInvite(teamId: string, inviterUserId: string, invi
     if (invitee.team_id) {
       return { success: false, error: "User is already a member of a team" }
     }
-
-    // Create team invitation record
-    // Note: In a real app, you would send an email or notification here
-    // For this demo, we'll just create a record in the database
 
     // For simplicity, we'll directly add the user to the team
     const { error: updateError } = await serviceClient.from("users").update({ team_id: teamId }).eq("id", invitee.id)

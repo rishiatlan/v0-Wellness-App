@@ -33,6 +33,9 @@ export default function CalendarView() {
 
         setActivityData(history)
         setMonthlyStats(stats)
+
+        // Log the stats to debug
+        console.log("Monthly stats:", stats)
       } catch (error) {
         console.error("Error fetching activity history:", error)
         // Don't show error toast for new users, just set empty data

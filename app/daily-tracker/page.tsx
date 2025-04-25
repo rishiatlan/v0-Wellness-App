@@ -166,6 +166,8 @@ export default function DailyTracker() {
     }
   }
 
+  // Fix the calculateTodayPoints function to ensure it correctly updates the total points
+
   // Function to calculate today's points directly from completed activities
   const calculateTodayPoints = useCallback((activityList: Activity[]) => {
     // Count completed activities for verification
@@ -407,9 +409,12 @@ export default function DailyTracker() {
     }
   }, [loading, activities, user, createDefaultActivities])
 
-  // Update today's points whenever activities change
+  // Update the useEffect hook that updates today's points whenever activities change
   useEffect(() => {
-    calculateTodayPoints(activities)
+    if (activities.length > 0) {
+      const points = calculateTodayPoints(activities)
+      console.log(`Updated today's points to ${points} based on ${activities.length} activities`)
+    }
   }, [activities, calculateTodayPoints])
 
   const maxDailyPoints = 30
@@ -869,7 +874,7 @@ export default function DailyTracker() {
         setActivityError("You have already logged this activity for today.")
         toast({
           title: "Already logged",
-          description: "This activity has already been logged today",
+          description: "You have already logged this activity for today.",
           variant: "default",
         })
       } else if (error.message.includes("foreign key constraint")) {
