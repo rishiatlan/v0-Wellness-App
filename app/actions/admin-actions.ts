@@ -3,60 +3,60 @@
 import { createServiceRoleClient } from "@/lib/server-auth"
 import { revalidatePath } from "next/cache"
 import { cookies } from "next/headers"
-import { createServerClient } from "@supabase/ssr"
+import { createClient } from "@/lib/supabase/server"
+import { createServiceRoleClient as createServiceRoleClientAdmin } from "@/lib/admin-utils"
 
-// Verify the user is an admin before performing any action
-async function verifyAdmin(userId: string, email?: string): Promise<boolean> {
-  const serviceClient = createServiceRoleClient()
+export async function getCurrentUser() {
+  const cookieStore = cookies()
+  const supabase = createClient(cookieStore)
 
-  // Check if user is in admin_users table by user_id or email
-  const { data, error } = await serviceClient
-    .from("admin_users")
-    .select("id")
-    .or(`user_id.eq.${userId},email.eq.${email?.toLowerCase() || ""}`)
-    .maybeSingle()
+  const {
+    data: { session },
+    error,
+  } = await supabase.auth.getSession()
 
-  if (error) {
-    console.error("Error verifying admin:", error)
-    throw new Error("Error verifying admin status")
+  if (error || !session) {
+    console.error("Session error:", error)
+    return null
   }
 
-  if (!data) {
-    throw new Error("Unauthorized: Admin access required")
-  }
-
-  return true
+  return session.user
 }
 
-// Get current user from session
-async function getCurrentUser() {
-  const cookieStore = cookies()
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get: (name) => cookieStore.get(name)?.value,
-        set: (name, value, options) => cookieStore.set(name, value, options),
-        remove: (name, options) => cookieStore.set(name, "", { ...options, maxAge: 0 }),
-      },
-    },
-  )
+export async function verifyAdmin() {
+  const user = await getCurrentUser()
 
-  const { data, error } = await supabase.auth.getUser()
-
-  if (error || !data.user) {
-    throw new Error("Authentication required")
+  if (!user || !user.email) {
+    console.error("No user found or user has no email")
+    return false
   }
 
-  return data.user
+  // Use the service role client to bypass RLS
+  const supabaseAdmin = createServiceRoleClientAdmin()
+
+  try {
+    // Direct query to admin_users table
+    const { data, error } = await supabaseAdmin.from("admin_users").select("*").eq("email", user.email).single()
+
+    if (error) {
+      console.error("Admin verification error:", error)
+      return false
+    }
+
+    return !!data
+  } catch (error) {
+    console.error("Admin verification exception:", error)
+    return false
+  }
 }
 
 // Get all users
 export async function getAllUsers() {
   try {
     const user = await getCurrentUser()
-    await verifyAdmin(user.id, user.email)
+    if (!user || !(await verifyAdmin())) {
+      throw new Error("Unauthorized: Admin access required")
+    }
 
     const serviceClient = createServiceRoleClient()
     const { data, error } = await serviceClient.from("users").select("*").order("full_name")
@@ -74,7 +74,9 @@ export async function getAllUsers() {
 export async function getAllTeams() {
   try {
     const user = await getCurrentUser()
-    await verifyAdmin(user.id, user.email)
+    if (!user || !(await verifyAdmin())) {
+      throw new Error("Unauthorized: Admin access required")
+    }
 
     const serviceClient = createServiceRoleClient()
 
@@ -111,7 +113,9 @@ export async function getAllTeams() {
 export async function resetUser(userId: string) {
   try {
     const user = await getCurrentUser()
-    await verifyAdmin(user.id, user.email)
+    if (!user || !(await verifyAdmin())) {
+      return { success: false, error: "Unauthorized: Admin access required" }
+    }
 
     const serviceClient = createServiceRoleClient()
 
@@ -166,7 +170,9 @@ export async function resetUser(userId: string) {
 export async function deleteUser(userId: string) {
   try {
     const user = await getCurrentUser()
-    await verifyAdmin(user.id, user.email)
+    if (!user || !(await verifyAdmin())) {
+      return { success: false, error: "Unauthorized: Admin access required" }
+    }
 
     const serviceClient = createServiceRoleClient()
 
@@ -218,7 +224,9 @@ export async function deleteUser(userId: string) {
 export async function resetTeam(teamId: string) {
   try {
     const user = await getCurrentUser()
-    await verifyAdmin(user.id, user.email)
+    if (!user || !(await verifyAdmin())) {
+      return { success: false, error: "Unauthorized: Admin access required" }
+    }
 
     const serviceClient = createServiceRoleClient()
 
@@ -265,7 +273,9 @@ export async function resetTeam(teamId: string) {
 export async function deleteTeam(teamId: string) {
   try {
     const user = await getCurrentUser()
-    await verifyAdmin(user.id, user.email)
+    if (!user || !(await verifyAdmin())) {
+      return { success: false, error: "Unauthorized: Admin access required" }
+    }
 
     const serviceClient = createServiceRoleClient()
 
@@ -312,7 +322,9 @@ export async function deleteTeam(teamId: string) {
 export async function createTeam(teamName: string) {
   try {
     const user = await getCurrentUser()
-    await verifyAdmin(user.id, user.email)
+    if (!user || !(await verifyAdmin())) {
+      return { success: false, error: "Unauthorized: Admin access required" }
+    }
 
     const serviceClient = createServiceRoleClient()
 
@@ -348,7 +360,9 @@ export async function createTeam(teamName: string) {
 export async function getAdminUsers() {
   try {
     const user = await getCurrentUser()
-    await verifyAdmin(user.id, user.email)
+    if (!user || !(await verifyAdmin())) {
+      throw new Error("Unauthorized: Admin access required")
+    }
 
     const serviceClient = createServiceRoleClient()
 
@@ -367,7 +381,9 @@ export async function getAdminUsers() {
 export async function addAdminUser(email: string) {
   try {
     const user = await getCurrentUser()
-    await verifyAdmin(user.id, user.email)
+    if (!user || !(await verifyAdmin())) {
+      return { success: false, error: "Unauthorized: Admin access required" }
+    }
 
     // Check if email is valid
     if (!email || !email.includes("@")) {
@@ -416,10 +432,12 @@ export async function addAdminUser(email: string) {
 export async function removeAdminUser(email: string) {
   try {
     const user = await getCurrentUser()
-    await verifyAdmin(user.id, user.email)
+    if (!user || !(await verifyAdmin())) {
+      return { success: false, error: "Unauthorized: Admin access required" }
+    }
 
     // Don't allow removing yourself
-    if (email.toLowerCase() === user.email?.toLowerCase()) {
+    if (email.toLowerCase() === user?.email?.toLowerCase()) {
       return { success: false, error: "You cannot remove your own admin privileges" }
     }
 
@@ -446,7 +464,9 @@ export async function removeAdminUser(email: string) {
 export async function addUserToTeam(userId: string, teamId: string) {
   try {
     const user = await getCurrentUser()
-    await verifyAdmin(user.id, user.email)
+    if (!user || !(await verifyAdmin())) {
+      return { success: false, error: "Unauthorized: Admin access required" }
+    }
 
     const serviceClient = createServiceRoleClient()
 
@@ -482,7 +502,9 @@ export async function addUserToTeam(userId: string, teamId: string) {
 export async function removeUserFromTeam(userId: string) {
   try {
     const user = await getCurrentUser()
-    await verifyAdmin(user.id, user.email)
+    if (!user || !(await verifyAdmin())) {
+      return { success: false, error: "Unauthorized: Admin access required" }
+    }
 
     const serviceClient = createServiceRoleClient()
 
@@ -537,7 +559,9 @@ export async function checkIsAdmin(email: string) {
 export async function addUser(email: string, fullName: string) {
   try {
     const user = await getCurrentUser()
-    await verifyAdmin(user.id, user.email)
+    if (!user || !(await verifyAdmin())) {
+      return { success: false, error: "Unauthorized: Admin access required" }
+    }
 
     // Check if email is valid
     if (!email || !email.includes("@atlan.com")) {

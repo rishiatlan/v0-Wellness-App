@@ -7,9 +7,12 @@ CREATE TABLE IF NOT EXISTS admin_users (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Add initial admin
+-- Add initial admins
 INSERT INTO admin_users (email, user_id)
-VALUES ('rishi.banerjee@atlan.com', (SELECT id FROM auth.users WHERE email = 'rishi.banerjee@atlan.com'))
+VALUES 
+  ('rishi.banerjee@atlan.com', (SELECT id FROM auth.users WHERE email = 'rishi.banerjee@atlan.com')),
+  ('steven.hloros@atlan.com', (SELECT id FROM auth.users WHERE email = 'steven.hloros@atlan.com')),
+  ('sucharita.tuer@atlan.com', (SELECT id FROM auth.users WHERE email = 'sucharita.tuer@atlan.com'))
 ON CONFLICT (email) DO NOTHING;
 
 -- Create RLS policies for admin_users table

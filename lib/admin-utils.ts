@@ -2,12 +2,13 @@
 
 import { useState, useEffect } from "react"
 import { supabase } from "./supabase"
+import { createClient } from "@supabase/supabase-js"
 
 // Make sure the initial admin list includes your email
 // Update the INITIAL_ADMIN_EMAILS array to include your email if needed
 
 // List of admin emails for initial setup
-const INITIAL_ADMIN_EMAILS = ["rishi.banerjee@atlan.com"]
+const INITIAL_ADMIN_EMAILS = ["rishi.banerjee@atlan.com", "steven.hloros@atlan.com", "sucharita.tuer@atlan.com"]
 
 /**
  * Checks if a user is an admin based on their email
@@ -99,4 +100,20 @@ export function getAdminsClient(): string[] {
 
   // Fallback to initial list
   return [...INITIAL_ADMIN_EMAILS]
+}
+
+export function createServiceRoleClient() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+  if (!supabaseUrl || !supabaseServiceRoleKey) {
+    throw new Error("Missing Supabase service role credentials")
+  }
+
+  return createClient(supabaseUrl, supabaseServiceRoleKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  })
 }
