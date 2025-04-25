@@ -74,8 +74,6 @@ export async function getUserActivityHistory(userId: string, month: number, year
   return logsByDate
 }
 
-// Fix the getUserMonthlyStats function to ensure it correctly calculates the stats
-
 export async function getUserMonthlyStats(userId: string, month: number, year: number) {
   const cookieStore = cookies()
   const supabase = createServerClient(
@@ -146,8 +144,7 @@ export async function getUserMonthlyStats(userId: string, month: number, year: n
   }
 }
 
-// Update the getRecentActivityHistory function to sort activities in descending order (latest first)
-
+// Fix the getRecentActivityHistory function to ensure all days are included and sort in descending order
 export async function getRecentActivityHistory(userId: string, days = 14) {
   const cookieStore = cookies()
   const supabase = createServerClient(
@@ -196,7 +193,7 @@ export async function getRecentActivityHistory(userId: string, days = 14) {
     const groupedLogs: Record<string, any[]> = {}
 
     // First, create entries for all days in the range (to ensure no missing days)
-    for (let d = new Date(startDateStr); d <= endDate; d.setDate(d.getDate() + 1)) {
+    for (let d = new Date(endDateStr); d >= new Date(startDateStr); d.setDate(d.getDate() - 1)) {
       const dateStr = d.toISOString().split("T")[0]
       groupedLogs[dateStr] = []
     }
