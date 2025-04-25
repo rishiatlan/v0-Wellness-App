@@ -1,0 +1,155 @@
+// This file is for use in the app directory only
+// DO NOT IMPORT THIS FILE IN THE PAGES DIRECTORY
+
+import { supabase } from "./supabase"
+import { isAtlanEmail as isAtlanEmailOriginal } from "@/lib/is-atlan-email"
+
+// Re-export the isAtlanEmail function for backward compatibility
+export const isAtlanEmail = isAtlanEmailOriginal
+
+// Sign up with email and password
+export async function signUp(email: string, password: string, fullName: string) {
+  if (!isAtlanEmail(email)) {
+    throw new Error("Only @atlan.com email addresses are allowed to register")
+  }
+
+  try {
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        emailRedirectTo: `${window.location.origin}/auth/callback`,
+        data: {
+          full_name: fullName,
+        },
+      },
+    })
+
+    if (error) throw error
+
+    return data
+  } catch (error: any) {
+    throw new Error(error.message)
+  }
+}
+
+// Sign in with email and password
+export async function signIn(email: string, password: string) {
+  console.log("Authentication attempt in progress")
+
+  try {
+    // Use signInWithPassword for email/password auth
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    })
+
+    if (error) {
+      console.error("Supabase auth error:", error.message, error)
+      throw error
+    }
+
+    // Verify the session was created
+    if (!data.session) {
+      console.error("No session created after successful authentication")
+      throw new Error("Authentication succeeded but no session was created")
+    }
+
+    return data
+  } catch (error: any) {
+    console.error("Sign in function caught error:", error)
+    throw new Error(error.message || "Authentication failed")
+  }
+}
+
+// Sign out
+export async function signOut() {
+  try {
+    console.log("Signing out user")
+    const { error } = await supabase.auth.signOut({
+      scope: "local", // Only sign out from this device
+    })
+
+    if (error) {
+      console.error("Error signing out:", error)
+      throw error
+    }
+
+    // Authentication complete
+    // Force reload to clear any cached state
+    window.location.href = "/auth/login"
+  } catch (error: any) {
+    console.error("Exception in signOut:", error)
+    throw new Error(error.message)
+  }
+}
+
+// Reset password
+export async function resetPassword(email: string) {
+  if (!isAtlanEmail(email)) {
+    throw new Error("Only @atlan.com email addresses are allowed")
+  }
+
+  try {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/auth/reset-password/confirm`,
+    })
+
+    if (error) throw error
+  } catch (error: any) {
+    throw new Error(error.message)
+  }
+}
+
+// Get user profile
+export async function getUserProfile(userId: string) {
+  try {
+    const { data, error } = await supabase.from("users").select("*").eq("id", userId).maybeSingle()
+
+    if (error) {
+      console.error("Error fetching user profile:", error)
+      throw error
+    }
+
+    return data
+  } catch (error: any) {
+    console.error("Exception in getUserProfile:", error)
+    throw new Error(error.message)
+  }
+}
+
+// Test Supabase connection
+export async function testSupabaseConnection() {
+  try {
+    console.log("Testing Supabase connection...")
+    const { data, error } = await supabase.from("users").select("count").limit(1)
+
+    if (error) {
+      console.error("Supabase connection test error:", error)
+      return { success: false, error: error.message }
+    }
+
+    console.log("Supabase connection successful:", data)
+    return { success: true, data }
+  } catch (error: any) {
+    console.error("Supabase connection test exception:", error)
+    return { success: false, error: error.message }
+  }
+}
+
+// Get user profile - client safe version
+export async function getUserProfileClientSafe(userId: string) {
+  try {
+    const { data, error } = await supabase.from("users").select("*").eq("id", userId).maybeSingle()
+
+    if (error) {
+      console.error("Error fetching user profile:", error)
+      throw error
+    }
+
+    return data
+  } catch (error: any) {
+    console.error("Exception in getUserProfile:", error)
+    throw new Error(error.message)
+  }
+}

@@ -1,0 +1,102 @@
+"use client"
+
+import { useState, useEffect } from "react"
+import { supabase } from "./supabase"
+
+// Make sure the initial admin list includes your email
+// Update the INITIAL_ADMIN_EMAILS array to include your email if needed
+
+// List of admin emails for initial setup
+const INITIAL_ADMIN_EMAILS = ["rishi.banerjee@atlan.com"]
+
+/**
+ * Checks if a user is an admin based on their email
+ */
+export function isAdmin(email: string | null | undefined): boolean {
+  if (!email) return false
+
+  // First check the initial list (for first-time setup)
+  if (INITIAL_ADMIN_EMAILS.includes(email.toLowerCase())) {
+    return true
+  }
+
+  // Then check local storage for cached admin list
+  try {
+    const cachedAdmins = localStorage.getItem("admin_emails")
+    if (cachedAdmins) {
+      const adminList = JSON.parse(cachedAdmins)
+      return adminList.includes(email.toLowerCase())
+    }
+  } catch (error) {
+    console.error("Error checking cached admin list:", error)
+  }
+
+  return false
+}
+
+/**
+ * Hook to get and cache the list of admin users
+ */
+export function useAdminUsers() {
+  const [admins, setAdmins] = useState<string[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const fetchAdmins = async () => {
+      try {
+        setLoading(true)
+
+        // In a real app, this would fetch from a database table
+        // For now, we'll use the user_metadata.is_admin field
+        const { data, error } = await supabase.from("admin_users").select("email")
+
+        if (error) throw error
+
+        const adminEmails = data?.map((item) => item.email.toLowerCase()) || []
+
+        // Include the initial admins
+        const allAdmins = [...new Set([...INITIAL_ADMIN_EMAILS, ...adminEmails])]
+
+        setAdmins(allAdmins)
+
+        // Cache the admin list in localStorage
+        try {
+          localStorage.setItem("admin_emails", JSON.stringify(allAdmins))
+        } catch (e) {
+          console.error("Error caching admin list:", e)
+        }
+      } catch (err: any) {
+        console.error("Error fetching admin users:", err)
+        setError(err.message)
+
+        // Fallback to initial list
+        setAdmins(INITIAL_ADMIN_EMAILS)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchAdmins()
+  }, [])
+
+  return { admins, loading, error }
+}
+
+/**
+ * Gets the list of admin emails (client-side)
+ */
+export function getAdminsClient(): string[] {
+  // First check local storage
+  try {
+    const cachedAdmins = localStorage.getItem("admin_emails")
+    if (cachedAdmins) {
+      return JSON.parse(cachedAdmins)
+    }
+  } catch (error) {
+    console.error("Error getting cached admin list:", error)
+  }
+
+  // Fallback to initial list
+  return [...INITIAL_ADMIN_EMAILS]
+}

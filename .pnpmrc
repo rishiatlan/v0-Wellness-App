@@ -1,0 +1,10 @@
+# Use legacy peer deps to handle peer dependency warnings
+legacy-peer-deps=true
+# Auto-install peers
+auto-install-peers=true
+# Shamefully hoist to ensure React is at the top level
+shamefully-hoist=true
+# Strict peer dependencies
+strict-peer-dependencies=false
+# Node linker
+node-linker=hoisted
