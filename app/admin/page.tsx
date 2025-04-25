@@ -21,6 +21,7 @@ import {
   UserCog,
   CheckCircle,
   Search,
+  Plus,
 } from "lucide-react"
 import {
   Dialog,
@@ -39,6 +40,7 @@ import { isAdmin } from "@/lib/admin-utils"
 // Import server actions
 import {
   resetUser,
+  deleteUser,
   resetTeam,
   deleteTeam,
   createTeam,
@@ -47,7 +49,9 @@ import {
   addUserToTeam,
   removeUserFromTeam,
   checkIsAdmin,
+  addUser,
 } from "@/app/actions/admin-actions"
+import { TeamDetails } from "@/app/team-challenge/team-details"
 
 export default function AdminDashboard() {
   const { user } = useAuth()
@@ -72,6 +76,12 @@ export default function AdminDashboard() {
   const [selectedUserForTeam, setSelectedUserForTeam] = useState<string | null>(null)
   const [isUserAdmin, setIsUserAdmin] = useState(false)
   const [adminCheckComplete, setAdminCheckComplete] = useState(false)
+  const [selectedTeamDetails, setSelectedTeamDetails] = useState<any | null>(null)
+
+  // New state for adding users
+  const [newUserEmail, setNewUserEmail] = useState("")
+  const [newUserName, setNewUserName] = useState("")
+  const [addUserDialogOpen, setAddUserDialogOpen] = useState(false)
 
   // Check if user is admin
   useEffect(() => {
@@ -277,6 +287,61 @@ export default function AdminDashboard() {
         )
       } else {
         setError(result.error || "Failed to reset user")
+      }
+    } catch (err: any) {
+      setError(err.message || "An error occurred")
+    } finally {
+      setActionInProgress(null)
+    }
+  }
+
+  const handleDeleteUser = async (userId: string) => {
+    setActionInProgress(`delete-user-${userId}`)
+    setError(null)
+    setSuccess(null)
+
+    try {
+      const result = await deleteUser(userId)
+      if (result.success) {
+        setSuccess(`User deleted successfully: ${result.email}`)
+
+        // Remove user from the list
+        setUsers(users.filter((user) => user.id !== userId))
+        setFilteredUsers(filteredUsers.filter((user) => user.id !== userId))
+      } else {
+        setError(result.error || "Failed to delete user")
+      }
+    } catch (err: any) {
+      setError(err.message || "An error occurred")
+    } finally {
+      setActionInProgress(null)
+    }
+  }
+
+  const handleAddNewUser = async () => {
+    if (!newUserEmail.trim() || !newUserEmail.includes("@atlan.com")) {
+      setError("Please enter a valid @atlan.com email address")
+      return
+    }
+
+    setActionInProgress("add-user")
+    setError(null)
+    setSuccess(null)
+
+    try {
+      const result = await addUser(newUserEmail, newUserName)
+      if (result.success) {
+        setSuccess(`User added successfully: ${newUserEmail}`)
+
+        // Add new user to the list
+        setUsers([...users, result.user])
+
+        // Reset form
+        setNewUserEmail("")
+        setNewUserName("")
+        setAddUserDialogOpen(false)
+      } else {
+        setError(result.error || "Failed to add user")
       }
     } catch (err: any) {
       setError(err.message || "An error occurred")
@@ -591,6 +656,10 @@ export default function AdminDashboard() {
     }
   }
 
+  const handleSelectTeamDetails = (team: any) => {
+    setSelectedTeamDetails(team)
+  }
+
   // Show loading state while checking admin status
   if (!adminCheckComplete) {
     return (
@@ -695,13 +764,77 @@ export default function AdminDashboard() {
             <Shield className="h-4 w-4" />
             <span>Admins</span>
           </TabsTrigger>
+          <TabsTrigger value="team-details" className="flex items-center gap-1">
+            <Users className="h-4 w-4" />
+            <span>Team Details</span>
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="users">
           <Card>
-            <CardHeader>
-              <CardTitle>User Management</CardTitle>
-              <CardDescription>View and manage all users in the system</CardDescription>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <div>
+                <CardTitle>User Management</CardTitle>
+                <CardDescription>View and manage all users in the system</CardDescription>
+              </div>
+              <Dialog open={addUserDialogOpen} onOpenChange={setAddUserDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button className="ml-auto">
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add User
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Add New User</DialogTitle>
+                    <DialogDescription>
+                      Add a new user to the system. Only @atlan.com email addresses are allowed.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="grid gap-4 py-4">
+                    <div className="grid gap-2">
+                      <label htmlFor="email" className="text-sm font-medium">
+                        Email
+                      </label>
+                      <Input
+                        id="email"
+                        placeholder="user@atlan.com"
+                        value={newUserEmail}
+                        onChange={(e) => setNewUserEmail(e.target.value)}
+                      />
+                      {newUserEmail && !newUserEmail.endsWith("@atlan.com") && (
+                        <p className="text-xs text-red-500">Only @atlan.com email addresses are allowed</p>
+                      )}
+                    </div>
+                    <div className="grid gap-2">
+                      <label htmlFor="name" className="text-sm font-medium">
+                        Full Name (Optional)
+                      </label>
+                      <Input
+                        id="name"
+                        placeholder="Full Name"
+                        value={newUserName}
+                        onChange={(e) => setNewUserName(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button
+                      onClick={handleAddNewUser}
+                      disabled={
+                        actionInProgress === "add-user" || !newUserEmail.trim() || !newUserEmail.endsWith("@atlan.com")
+                      }
+                    >
+                      {actionInProgress === "add-user" ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <UserPlus className="mr-2 h-4 w-4" />
+                      )}
+                      {actionInProgress === "add-user" ? "Adding..." : "Add User"}
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
             </CardHeader>
             <CardContent>
               <div className="rounded-md border">
@@ -808,6 +941,43 @@ export default function AdminDashboard() {
                                         <Loader2 className="h-4 w-4 animate-spin mr-2" />
                                       ) : null}
                                       {actionInProgress === `reset-user-${user.id}` ? "Resetting..." : "Reset User"}
+                                    </Button>
+                                  </DialogFooter>
+                                </DialogContent>
+                              </Dialog>
+
+                              <Dialog>
+                                <DialogTrigger asChild>
+                                  <Button variant="destructive" size="sm">
+                                    <Trash2 className="h-4 w-4 mr-1" />
+                                    Delete
+                                  </Button>
+                                </DialogTrigger>
+                                <DialogContent>
+                                  <DialogHeader>
+                                    <DialogTitle>Delete User</DialogTitle>
+                                    <DialogDescription>
+                                      Are you sure you want to delete this user? This action cannot be undone.
+                                    </DialogDescription>
+                                  </DialogHeader>
+                                  <div className="py-4">
+                                    <p>
+                                      <strong>Name:</strong> {user.full_name || "Unnamed User"}
+                                    </p>
+                                    <p>
+                                      <strong>Email:</strong> {user.email}
+                                    </p>
+                                  </div>
+                                  <DialogFooter>
+                                    <Button
+                                      variant="destructive"
+                                      onClick={() => handleDeleteUser(user.id)}
+                                      disabled={actionInProgress === `delete-user-${user.id}`}
+                                    >
+                                      {actionInProgress === `delete-user-${user.id}` ? (
+                                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                      ) : null}
+                                      {actionInProgress === `delete-user-${user.id}` ? "Deleting..." : "Delete User"}
                                     </Button>
                                   </DialogFooter>
                                 </DialogContent>
@@ -1191,6 +1361,33 @@ export default function AdminDashboard() {
               </CardContent>
             </Card>
           </div>
+        </TabsContent>
+        <TabsContent value="team-details">
+          <Card>
+            <CardHeader>
+              <CardTitle>Team Details</CardTitle>
+              <CardDescription>View details for each team</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {teams.length > 0 ? (
+                  teams.map((team) => (
+                    <div key={team.id} className="rounded-lg border p-4">
+                      <h3 className="text-lg font-medium">{team.name}</h3>
+                      <p className="text-sm text-muted-foreground">Total Points: {team.total_points}</p>
+                      <p className="text-sm text-muted-foreground">Members: {team.member_count}</p>
+                      <Button variant="outline" size="sm" onClick={() => handleSelectTeamDetails(team)}>
+                        View Details
+                      </Button>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground">No teams found</div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+          {selectedTeamDetails && <TeamDetails team={selectedTeamDetails} users={users} />}
         </TabsContent>
       </Tabs>
     </div>

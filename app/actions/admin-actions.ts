@@ -6,14 +6,14 @@ import { cookies } from "next/headers"
 import { createServerClient } from "@supabase/ssr"
 
 // Verify the user is an admin before performing any action
-async function verifyAdmin(email: string) {
+async function verifyAdmin(userId: string, email?: string): Promise<boolean> {
   const serviceClient = createServiceRoleClient()
 
-  // Check if user is in admin_users table
+  // Check if user is in admin_users table by user_id or email
   const { data, error } = await serviceClient
     .from("admin_users")
     .select("id")
-    .eq("email", email.toLowerCase())
+    .or(`user_id.eq.${userId},email.eq.${email?.toLowerCase() || ""}`)
     .maybeSingle()
 
   if (error) {
@@ -56,7 +56,7 @@ async function getCurrentUser() {
 export async function getAllUsers() {
   try {
     const user = await getCurrentUser()
-    await verifyAdmin(user.email || "")
+    await verifyAdmin(user.id, user.email)
 
     const serviceClient = createServiceRoleClient()
     const { data, error } = await serviceClient.from("users").select("*").order("full_name")
@@ -74,7 +74,7 @@ export async function getAllUsers() {
 export async function getAllTeams() {
   try {
     const user = await getCurrentUser()
-    await verifyAdmin(user.email || "")
+    await verifyAdmin(user.id, user.email)
 
     const serviceClient = createServiceRoleClient()
 
@@ -111,7 +111,7 @@ export async function getAllTeams() {
 export async function resetUser(userId: string) {
   try {
     const user = await getCurrentUser()
-    await verifyAdmin(user.email || "")
+    await verifyAdmin(user.id, user.email)
 
     const serviceClient = createServiceRoleClient()
 
@@ -162,11 +162,63 @@ export async function resetUser(userId: string) {
   }
 }
 
+// Delete a user
+export async function deleteUser(userId: string) {
+  try {
+    const user = await getCurrentUser()
+    await verifyAdmin(user.id, user.email)
+
+    const serviceClient = createServiceRoleClient()
+
+    // Get user details first
+    const { data: userData, error: userError } = await serviceClient
+      .from("users")
+      .select("email, full_name")
+      .eq("id", userId)
+      .single()
+
+    if (userError) throw userError
+
+    // Delete user's daily logs
+    const { error: logsError } = await serviceClient.from("daily_logs").delete().eq("user_id", userId)
+
+    if (logsError) throw logsError
+
+    // Delete user's achievements
+    const { error: achievementsError } = await serviceClient.from("user_achievements").delete().eq("user_id", userId)
+
+    if (achievementsError) throw achievementsError
+
+    // Remove user from any team
+    const { error: updateError } = await serviceClient.from("users").update({ team_id: null }).eq("id", userId)
+
+    if (updateError) throw updateError
+
+    // Delete the user
+    const { error } = await serviceClient.from("users").delete().eq("id", userId)
+
+    if (error) throw error
+
+    revalidatePath("/admin")
+    revalidatePath("/team-challenge")
+    revalidatePath("/leaderboard")
+
+    return {
+      success: true,
+      email: userData.email,
+      name: userData.full_name,
+    }
+  } catch (error: any) {
+    console.error("Error deleting user:", error)
+    return { success: false, error: error.message }
+  }
+}
+
 // Reset a team (remove all members, reset points)
 export async function resetTeam(teamId: string) {
   try {
     const user = await getCurrentUser()
-    await verifyAdmin(user.email || "")
+    await verifyAdmin(user.id, user.email)
 
     const serviceClient = createServiceRoleClient()
 
@@ -213,7 +265,7 @@ export async function resetTeam(teamId: string) {
 export async function deleteTeam(teamId: string) {
   try {
     const user = await getCurrentUser()
-    await verifyAdmin(user.email || "")
+    await verifyAdmin(user.id, user.email)
 
     const serviceClient = createServiceRoleClient()
 
@@ -260,7 +312,7 @@ export async function deleteTeam(teamId: string) {
 export async function createTeam(teamName: string) {
   try {
     const user = await getCurrentUser()
-    await verifyAdmin(user.email || "")
+    await verifyAdmin(user.id, user.email)
 
     const serviceClient = createServiceRoleClient()
 
@@ -296,7 +348,7 @@ export async function createTeam(teamName: string) {
 export async function getAdminUsers() {
   try {
     const user = await getCurrentUser()
-    await verifyAdmin(user.email || "")
+    await verifyAdmin(user.id, user.email)
 
     const serviceClient = createServiceRoleClient()
 
@@ -315,7 +367,7 @@ export async function getAdminUsers() {
 export async function addAdminUser(email: string) {
   try {
     const user = await getCurrentUser()
-    await verifyAdmin(user.email || "")
+    await verifyAdmin(user.id, user.email)
 
     // Check if email is valid
     if (!email || !email.includes("@")) {
@@ -364,7 +416,7 @@ export async function addAdminUser(email: string) {
 export async function removeAdminUser(email: string) {
   try {
     const user = await getCurrentUser()
-    await verifyAdmin(user.email || "")
+    await verifyAdmin(user.id, user.email)
 
     // Don't allow removing yourself
     if (email.toLowerCase() === user.email?.toLowerCase()) {
@@ -394,7 +446,7 @@ export async function removeAdminUser(email: string) {
 export async function addUserToTeam(userId: string, teamId: string) {
   try {
     const user = await getCurrentUser()
-    await verifyAdmin(user.email || "")
+    await verifyAdmin(user.id, user.email)
 
     const serviceClient = createServiceRoleClient()
 
@@ -430,7 +482,7 @@ export async function addUserToTeam(userId: string, teamId: string) {
 export async function removeUserFromTeam(userId: string) {
   try {
     const user = await getCurrentUser()
-    await verifyAdmin(user.email || "")
+    await verifyAdmin(user.id, user.email)
 
     const serviceClient = createServiceRoleClient()
 
@@ -478,5 +530,58 @@ export async function checkIsAdmin(email: string) {
   } catch (error: any) {
     console.error("Error checking admin status:", error)
     return { isAdmin: false, error: error.message }
+  }
+}
+
+// Add a new user
+export async function addUser(email: string, fullName: string) {
+  try {
+    const user = await getCurrentUser()
+    await verifyAdmin(user.id, user.email)
+
+    // Check if email is valid
+    if (!email || !email.includes("@atlan.com")) {
+      return { success: false, error: "Only @atlan.com email addresses are allowed" }
+    }
+
+    const serviceClient = createServiceRoleClient()
+
+    // Check if user already exists
+    const { data: existingUser, error: checkError } = await serviceClient
+      .from("users")
+      .select("id")
+      .eq("email", email)
+      .maybeSingle()
+
+    if (checkError) throw checkError
+
+    if (existingUser) {
+      return { success: false, error: "User with this email already exists" }
+    }
+
+    // Create new user
+    const { data, error } = await serviceClient
+      .from("users")
+      .insert({
+        email: email,
+        full_name: fullName || email.split("@")[0],
+        total_points: 0,
+        current_tier: 0,
+        current_streak: 0,
+      })
+      .select()
+      .single()
+
+    if (error) throw error
+
+    revalidatePath("/admin")
+
+    return {
+      success: true,
+      user: data,
+    }
+  } catch (error: any) {
+    console.error("Error adding user:", error)
+    return { success: false, error: error.message }
   }
 }
