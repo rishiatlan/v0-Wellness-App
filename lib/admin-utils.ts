@@ -4,10 +4,7 @@ import { useState, useEffect } from "react"
 import { supabase } from "./supabase"
 import { createClient } from "@supabase/supabase-js"
 
-// Make sure the initial admin list includes your email
-// Update the INITIAL_ADMIN_EMAILS array to include your email if needed
-
-// List of admin emails for initial setup
+// CRITICAL FIX: Make sure this list includes your email
 export const INITIAL_ADMIN_EMAILS = ["rishi.banerjee@atlan.com", "steven.hloros@atlan.com", "sucharita.tuer@atlan.com"]
 
 /**
@@ -17,7 +14,8 @@ export function isAdmin(email: string | null | undefined): boolean {
   if (!email) return false
 
   // First check the initial list (for first-time setup)
-  if (INITIAL_ADMIN_EMAILS.some((adminEmail) => adminEmail.toLowerCase() === email.toLowerCase())) {
+  const emailLower = email.toLowerCase()
+  if (INITIAL_ADMIN_EMAILS.some((adminEmail) => adminEmail.toLowerCase() === emailLower)) {
     console.log("User is in INITIAL_ADMIN_EMAILS:", email)
     return true
   }
@@ -27,7 +25,7 @@ export function isAdmin(email: string | null | undefined): boolean {
     const cachedAdmins = localStorage.getItem("admin_emails")
     if (cachedAdmins) {
       const adminList = JSON.parse(cachedAdmins)
-      const isInCachedList = adminList.some((adminEmail: string) => adminEmail.toLowerCase() === email.toLowerCase())
+      const isInCachedList = adminList.some((adminEmail: string) => adminEmail.toLowerCase() === emailLower)
       if (isInCachedList) {
         console.log("User is in cached admin list:", email)
         return true

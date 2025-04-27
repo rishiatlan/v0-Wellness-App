@@ -18,83 +18,64 @@ export async function getCurrentUser() {
   } = await supabase.auth.getSession()
 
   if (error || !session) {
-    console.error("Session error:", error)
+    console.error("Server: Session error:", error)
     return null
   }
 
   return session.user
 }
 
-// Update the verifyAdmin function with more detailed logging and robust checks
+// Simplified and more robust admin verification
 export async function verifyAdmin() {
-  const user = await getCurrentUser()
-
-  if (!user || !user.email) {
-    console.error("No user found or user has no email")
-    return false
-  }
-
-  console.log("Checking admin status for:", user.email)
-
-  // First check if user is in INITIAL_ADMIN_EMAILS
-  const isInitialAdmin = INITIAL_ADMIN_EMAILS.some(
-    (adminEmail) => adminEmail.toLowerCase() === user.email?.toLowerCase(),
-  )
-
-  if (isInitialAdmin) {
-    console.log("User is in INITIAL_ADMIN_EMAILS:", user.email)
-    return true
-  }
-
-  // Use the service role client to bypass RLS
-  const serviceClient = createServiceRoleClient()
-
   try {
-    // Try direct SQL query first for most reliable results
-    const { data: sqlResult, error: sqlError } = await serviceClient.rpc("execute_sql", {
-      sql_query: `SELECT * FROM admin_users WHERE LOWER(email) = LOWER('${user.email}')`,
-    })
+    const user = await getCurrentUser()
 
-    if (sqlError) {
-      console.error("SQL query error:", sqlError)
-    } else if (sqlResult && sqlResult.length > 0) {
-      console.log("User found in admin_users via SQL query:", user.email)
-      return true
-    }
-
-    // Try the is_admin function if available
-    try {
-      const { data: isAdminResult, error: isAdminError } = await serviceClient.rpc("is_admin", {
-        user_email: user.email,
-      })
-
-      if (isAdminError) {
-        console.error("is_admin function error:", isAdminError)
-      } else if (isAdminResult) {
-        console.log("User is admin according to is_admin function:", user.email)
-        return true
-      }
-    } catch (functionError) {
-      console.error("Error calling is_admin function:", functionError)
-    }
-
-    // Fallback to direct query with case-insensitive comparison
-    const { data, error } = await serviceClient.from("admin_users").select("*").ilike("email", user.email).maybeSingle()
-
-    if (error) {
-      console.error("Admin verification error:", error)
+    if (!user || !user.email) {
+      console.error("Server: No user found or user has no email")
       return false
     }
 
-    if (data) {
-      console.log("User found in admin_users via ilike query:", user.email)
+    console.log("Server: Checking admin status for:", user.email)
+
+    // CRITICAL FIX: Always check INITIAL_ADMIN_EMAILS first and make it case-insensitive
+    const userEmailLower = user.email.toLowerCase()
+    const isInitialAdmin = INITIAL_ADMIN_EMAILS.some((adminEmail) => adminEmail.toLowerCase() === userEmailLower)
+
+    if (isInitialAdmin) {
+      console.log("Server: User is in INITIAL_ADMIN_EMAILS:", user.email)
       return true
     }
 
-    console.log("User is not an admin:", user.email)
+    // If not in initial list, check the database
+    try {
+      const serviceClient = createServiceRoleClient()
+
+      // Simple direct query with case-insensitive comparison
+      const { data, error } = await serviceClient
+        .from("admin_users")
+        .select("*")
+        .ilike("email", user.email)
+        .maybeSingle()
+
+      if (error) {
+        console.error("Server: Admin verification error:", error)
+        return false
+      }
+
+      if (data) {
+        console.log("Server: User found in admin_users table:", user.email)
+        return true
+      }
+    } catch (error) {
+      console.error("Server: Error checking admin_users table:", error)
+      // Fall back to initial admin list if database check fails
+      return isInitialAdmin
+    }
+
+    console.log("Server: User is not an admin:", user.email)
     return false
   } catch (error) {
-    console.error("Admin verification exception:", error)
+    console.error("Server: Admin verification exception:", error)
     return false
   }
 }
