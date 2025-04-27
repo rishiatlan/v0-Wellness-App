@@ -117,28 +117,28 @@ export default function CalendarView() {
             const isFuture = !isPast && !isToday
 
             // Determine the background color based on points
-            let bgColorClass = "bg-muted/20"
-            let textColorClass = ""
+            let bgColorClass = "bg-gray-100 dark:bg-muted/20"
+            let textColorClass = "text-gray-700 dark:text-gray-300"
 
             if (hasActivities) {
               const points = dayData.totalPoints
               if (points === 30) {
-                bgColorClass = "bg-green-100 dark:bg-green-900/30"
+                bgColorClass = "bg-green-200 dark:bg-green-900/30"
                 textColorClass = "text-green-800 dark:text-green-300"
               } else if (points >= 20) {
-                bgColorClass = "bg-teal-100 dark:bg-teal-900/30"
+                bgColorClass = "bg-teal-200 dark:bg-teal-900/30"
                 textColorClass = "text-teal-800 dark:text-teal-300"
               } else if (points >= 10) {
-                bgColorClass = "bg-blue-100 dark:bg-blue-900/30"
+                bgColorClass = "bg-blue-200 dark:bg-blue-900/30"
                 textColorClass = "text-blue-800 dark:text-blue-300"
               } else {
-                bgColorClass = "bg-amber-100 dark:bg-amber-900/30"
+                bgColorClass = "bg-amber-200 dark:bg-amber-900/30"
                 textColorClass = "text-amber-800 dark:text-amber-300"
               }
             }
 
             if (isToday) {
-              bgColorClass = hasActivities ? bgColorClass : "bg-primary/10"
+              bgColorClass = hasActivities ? bgColorClass : "bg-primary/20 dark:bg-primary/10"
               textColorClass = hasActivities ? textColorClass : "text-primary font-medium"
             }
 
@@ -211,38 +211,50 @@ export default function CalendarView() {
 
             {monthlyStats && (
               <div className="mt-6 grid grid-cols-3 gap-4">
-                <div className="rounded-lg bg-blue-50 p-3 text-center dark:bg-blue-900/20">
-                  <div className="text-xl font-bold text-blue-700 dark:text-blue-300">
+                <div className="rounded-lg bg-blue-200 p-3 text-center dark:bg-blue-900/20">
+                  <div className="text-xl font-bold text-blue-800 dark:text-blue-300">
                     {monthlyStats.totalDaysLogged || 0}
                   </div>
-                  <div className="text-xs text-blue-700 dark:text-blue-300">Days Logged</div>
+                  <div className="text-sm text-blue-800 dark:text-blue-300">Days Logged</div>
                 </div>
-                <div className="rounded-lg bg-teal-50 p-3 text-center dark:bg-teal-900/20">
-                  <div className="text-xl font-bold text-teal-700 dark:text-teal-300">
+                <div className="rounded-lg bg-teal-200 p-3 text-center dark:bg-teal-900/20">
+                  <div className="text-xl font-bold text-teal-800 dark:text-teal-300">
                     {monthlyStats.perfectDays || 0}
                   </div>
-                  <div className="text-xs text-teal-700 dark:text-teal-300">Perfect Days</div>
+                  <div className="text-sm text-teal-800 dark:text-teal-300">Perfect Days</div>
                 </div>
-                <div className="rounded-lg bg-purple-50 p-3 text-center dark:bg-purple-900/20">
-                  <div className="text-xl font-bold text-purple-700 dark:text-purple-300">
+                <div className="rounded-lg bg-purple-200 p-3 text-center dark:bg-purple-900/20">
+                  <div className="text-xl font-bold text-purple-800 dark:text-purple-300">
                     {monthlyStats.totalPoints || 0}
                   </div>
-                  <div className="text-xs text-purple-700 dark:text-purple-300">Total Points</div>
+                  <div className="text-sm text-purple-800 dark:text-purple-300">Total Points</div>
                 </div>
               </div>
             )}
 
             <div className="mt-4 flex flex-wrap gap-2">
-              <Badge variant="outline" className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300">
+              <Badge
+                variant="outline"
+                className="bg-green-200 text-green-800 dark:bg-green-900/30 dark:text-green-300 border-green-300 dark:border-green-800"
+              >
                 30 pts - Perfect Day
               </Badge>
-              <Badge variant="outline" className="bg-teal-100 text-teal-800 dark:bg-teal-900/30 dark:text-teal-300">
+              <Badge
+                variant="outline"
+                className="bg-teal-200 text-teal-800 dark:bg-teal-900/30 dark:text-teal-300 border-teal-300 dark:border-teal-800"
+              >
                 20-29 pts - Great Day
               </Badge>
-              <Badge variant="outline" className="bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300">
+              <Badge
+                variant="outline"
+                className="bg-blue-200 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 border-blue-300 dark:border-blue-800"
+              >
                 10-19 pts - Good Day
               </Badge>
-              <Badge variant="outline" className="bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
+              <Badge
+                variant="outline"
+                className="bg-amber-200 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 border-amber-300 dark:border-amber-800"
+              >
                 1-9 pts - Started Day
               </Badge>
             </div>
