@@ -112,12 +112,6 @@ export default function ProfilePage() {
                 <span>{user.last_sign_in_at ? new Date(user.last_sign_in_at).toLocaleDateString() : "N/A"}</span>
               </div>
             </div>
-
-            <div className="pt-4">
-              <Button variant="outline" className="w-full">
-                Edit Profile
-              </Button>
-            </div>
           </CardContent>
         </Card>
 

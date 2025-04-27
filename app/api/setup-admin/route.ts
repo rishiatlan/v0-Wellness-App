@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
 import { createServiceRoleClient } from "@/lib/server-auth"
 import { INITIAL_ADMIN_EMAILS } from "@/lib/admin-utils"
+import { cookies } from "next/headers"
+import { createClient } from "@/lib/supabase/server"
 
 // This endpoint will force setup the admin_users table and add the initial admins
 export async function GET(request: Request) {
@@ -167,5 +169,73 @@ export async function GET(request: Request) {
   } catch (error: any) {
     console.error("Setup admin endpoint error:", error)
     return NextResponse.json({ error: "Setup admin endpoint error", details: error.message }, { status: 500 })
+  }
+}
+
+export async function POST(request: Request) {
+  try {
+    const cookieStore = cookies()
+    const supabase = createClient(cookieStore)
+
+    const {
+      data: { session },
+      error: sessionError,
+    } = await supabase.auth.getSession()
+
+    if (sessionError || !session) {
+      return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
+    }
+
+    const user = session.user
+    if (!user || !user.email) {
+      return NextResponse.json({ error: "No user email found" }, { status: 400 })
+    }
+
+    const body = await request.json()
+    const email = body.email
+
+    if (!email || email !== user.email) {
+      return NextResponse.json({ error: "Invalid email" }, { status: 400 })
+    }
+
+    // Use service role client to add user to admin_users table
+    const serviceClient = createServiceRoleClient()
+
+    // Check if user already exists in admin_users
+    const { data: existingAdmin, error: checkError } = await serviceClient
+      .from("admin_users")
+      .select("id")
+      .ilike("email", email)
+      .maybeSingle()
+
+    if (checkError) {
+      return NextResponse.json({ error: `Error checking admin status: ${checkError.message}` }, { status: 500 })
+    }
+
+    if (existingAdmin) {
+      return NextResponse.json({ message: "User is already an admin", id: existingAdmin.id })
+    }
+
+    // Add user to admin_users table
+    const { data, error } = await serviceClient
+      .from("admin_users")
+      .insert({
+        email: email.toLowerCase(),
+        user_id: user.id,
+      })
+      .select()
+      .single()
+
+    if (error) {
+      return NextResponse.json({ error: `Error adding admin: ${error.message}` }, { status: 500 })
+    }
+
+    return NextResponse.json({
+      message: "Admin status set successfully",
+      id: data.id,
+    })
+  } catch (error: any) {
+    console.error("Error in setup-admin API:", error)
+    return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }

@@ -53,6 +53,9 @@ import {
 } from "@/app/actions/admin-actions"
 import { TeamDetails } from "@/app/team-challenge/team-details"
 
+// Import the DebugAdmin component
+import { DebugAdmin } from "./debug-admin"
+
 export default function AdminDashboard() {
   const { user } = useAuth()
   const router = useRouter()
@@ -770,6 +773,10 @@ export default function AdminDashboard() {
             <Users className="h-4 w-4" />
             <span>Team Details</span>
           </TabsTrigger>
+          <TabsTrigger value="debug" className="flex items-center gap-1">
+            <Shield className="h-4 w-4" />
+            <span>Debug</span>
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="users">
@@ -1304,6 +1311,9 @@ export default function AdminDashboard() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+        <TabsContent value="debug">
+          <DebugAdmin />
         </TabsContent>
       </Tabs>
     </div>
