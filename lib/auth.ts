@@ -91,6 +91,7 @@ export async function resetPassword(email: string) {
   }
 
   try {
+    // Update the redirectTo URL to match the exact path we've created
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: `${window.location.origin}/auth/reset-password/confirm`,
     })

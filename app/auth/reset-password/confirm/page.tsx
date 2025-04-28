@@ -2,8 +2,8 @@
 
 import type React from "react"
 
-import { useState, useEffect } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useState } from "react"
+import { useRouter } from "next/navigation"
 import Link from "next/link"
 import Image from "next/image"
 import { supabase } from "@/lib/supabase"
@@ -12,7 +12,85 @@ import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { AlertCircle, CheckCircle, Eye, EyeOff, KeyRound } from "lucide-react"
+import { AlertCircle, CheckCircle, Eye, EyeOff, KeyRound, Check, X } from "lucide-react"
+
+// Password requirements component
+const PasswordRequirements = ({ password }: { password: string }) => {
+  // Define password requirements
+  const requirements = [
+    {
+      text: "At least 8 characters long",
+      met: password.length >= 8,
+    },
+    {
+      text: "Contains at least one uppercase letter",
+      met: /[A-Z]/.test(password),
+    },
+    {
+      text: "Contains at least one lowercase letter",
+      met: /[a-z]/.test(password),
+    },
+    {
+      text: "Contains at least one number",
+      met: /[0-9]/.test(password),
+    },
+    {
+      text: "Contains at least one special character",
+      met: /[^A-Za-z0-9]/.test(password),
+    },
+  ]
+
+  // Calculate overall strength
+  const metCount = requirements.filter((req) => req.met).length
+  const strength = metCount === 0 ? 0 : metCount / requirements.length
+
+  // Determine strength color and label
+  let strengthColor = "bg-red-500"
+  let strengthLabel = "Weak"
+
+  if (strength >= 0.8) {
+    strengthColor = "bg-green-500"
+    strengthLabel = "Strong"
+  } else if (strength >= 0.5) {
+    strengthColor = "bg-yellow-500"
+    strengthLabel = "Medium"
+  } else if (strength > 0) {
+    strengthColor = "bg-red-500"
+    strengthLabel = "Weak"
+  }
+
+  return (
+    <div className="mt-2 space-y-3">
+      <div className="space-y-2">
+        <div className="text-xs text-muted-foreground">Password strength: {strengthLabel}</div>
+        <div className="h-1.5 w-full bg-gray-200 rounded-full overflow-hidden">
+          <div
+            className={`h-full ${strengthColor} transition-all duration-300 ease-in-out`}
+            style={{ width: `${strength * 100}%` }}
+          ></div>
+        </div>
+      </div>
+
+      <div className="space-y-1.5">
+        <p className="text-xs font-medium text-muted-foreground">Your password must include:</p>
+        <ul className="space-y-1">
+          {requirements.map((req, index) => (
+            <li key={index} className="flex items-center text-xs">
+              {req.met ? (
+                <Check className="h-3.5 w-3.5 mr-2 text-green-500" />
+              ) : (
+                <X className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
+              )}
+              <span className={req.met ? "text-green-700 dark:text-green-400" : "text-muted-foreground"}>
+                {req.text}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  )
+}
 
 export default function ResetPasswordConfirmPage() {
   const [password, setPassword] = useState("")
@@ -22,39 +100,28 @@ export default function ResetPasswordConfirmPage() {
   const [success, setSuccess] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+  const [passwordFocused, setPasswordFocused] = useState(false)
 
   const router = useRouter()
-  const searchParams = useSearchParams()
 
-  // Check if we have the necessary parameters in the URL
-  useEffect(() => {
-    // The URL should contain a hash fragment with the access token
-    // This is handled automatically by Supabase's SDK
-    if (!window.location.hash) {
-      setError("Invalid or expired password reset link. Please request a new one.")
-    }
-  }, [])
-
-  // Add this useEffect to better handle token validation
-  useEffect(() => {
-    const checkSession = async () => {
-      const { data, error } = await supabase.auth.getSession()
-
-      if (error || !data.session) {
-        setError("Invalid or expired password reset link. Please request a new one.")
-      }
-    }
-
-    checkSession()
-  }, [])
+  // Check if password meets all requirements
+  const passwordMeetsRequirements = () => {
+    return (
+      password.length >= 8 &&
+      /[A-Z]/.test(password) &&
+      /[a-z]/.test(password) &&
+      /[0-9]/.test(password) &&
+      /[^A-Za-z0-9]/.test(password)
+    )
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError("")
 
-    // Validate password
-    if (password.length < 8) {
-      setError("Password must be at least 8 characters long")
+    // Validate password meets all requirements
+    if (!passwordMeetsRequirements()) {
+      setError("Your password doesn't meet all the requirements")
       return
     }
 
@@ -91,12 +158,11 @@ export default function ResetPasswordConfirmPage() {
     <div className="container flex h-screen flex-col items-center justify-center max-w-md">
       <div className="mb-8 flex flex-col items-center text-center">
         <Image
-          src="https://mqvcdyzqegzqfwvesoiz.supabase.co/storage/v1/object/public/email-assets//wellness.png"
+          src="/wellness-logo.png"
           width={80}
           height={80}
           alt="Spring into Wellness Logo"
           className="object-contain"
-          unoptimized
         />
         <h1 className="mt-4 text-3xl font-bold">Spring into Wellness</h1>
         <p className="text-muted-foreground">Create a new password</p>
@@ -132,6 +198,8 @@ export default function ResetPasswordConfirmPage() {
                   type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  onFocus={() => setPasswordFocused(true)}
+                  onBlur={() => setPasswordFocused(false)}
                   className="pl-9"
                   placeholder="Enter new password"
                   required
@@ -149,9 +217,9 @@ export default function ResetPasswordConfirmPage() {
                   <span className="sr-only">{showPassword ? "Hide password" : "Show password"}</span>
                 </Button>
               </div>
-              {password && password.length < 8 && (
-                <p className="text-xs text-red-500">Password must be at least 8 characters long</p>
-              )}
+
+              {/* Show password requirements when password field is focused or has content */}
+              {(passwordFocused || password.length > 0) && <PasswordRequirements password={password} />}
             </div>
 
             <div className="space-y-2">
@@ -185,7 +253,11 @@ export default function ResetPasswordConfirmPage() {
               )}
             </div>
 
-            <Button type="submit" className="w-full" disabled={loading || success}>
+            <Button
+              type="submit"
+              className="w-full"
+              disabled={loading || success || !passwordMeetsRequirements() || password !== confirmPassword}
+            >
               {loading ? "Resetting Password..." : "Reset Password"}
             </Button>
           </form>
