@@ -4,48 +4,35 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222 47% 11%;
-    --card: 0 0% 100%;
-    --card-foreground: 222 47% 11%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 222 47% 11%;
-    --primary: 196 100% 35%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222 47% 11%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222 47% 11%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 196 100% 35%;
-    --radius: 0.5rem;
-  }
-
-  .dark {
     --background: 222 47% 11%;
     --foreground: 210 40% 98%;
+
     --card: 222 47% 11%;
     --card-foreground: 210 40% 98%;
+
     --popover: 222 47% 11%;
     --popover-foreground: 210 40% 98%;
+
     --primary: 196 100% 50%;
     --primary-foreground: 222 47% 11%;
+
     --secondary: 217.2 32.6% 17.5%;
     --secondary-foreground: 210 40% 98%;
+
     --muted: 217.2 32.6% 17.5%;
     --muted-foreground: 215 20.2% 65.1%;
+
     --accent: 217.2 32.6% 17.5%;
     --accent-foreground: 210 40% 98%;
+
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 210 40% 98%;
+
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
     --ring: 196 100% 50%;
+
+    --radius: 0.5rem;
   }
 }
 
@@ -54,6 +41,110 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-navy-950 text-foreground;
   }
+}
+
+/* Custom scrollbar for better UX */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: hsl(222, 47%, 15%);
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(196, 100%, 40%);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(196, 100%, 50%);
+}
+
+/* Improved focus styles for accessibility */
+:focus-visible {
+  outline: 2px solid hsl(196, 100%, 50%);
+  outline-offset: 2px;
+}
+
+/* Card hover effects */
+.card-hover {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+}
+
+/* Gradient text for emphasis */
+.gradient-text {
+  @apply bg-gradient-to-r from-teal-400 to-blue-500 bg-clip-text text-transparent;
+}
+
+/* Button animations */
+.btn-pulse {
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(49, 196, 255, 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(49, 196, 255, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(49, 196, 255, 0);
+  }
+}
+
+/* Improved table styles */
+.atlan-table {
+  @apply w-full border-collapse;
+}
+
+.atlan-table th {
+  @apply bg-navy-900 p-3 text-left text-sm font-medium text-gray-300;
+}
+
+.atlan-table td {
+  @apply border-t border-navy-800 p-3 text-sm;
+}
+
+.atlan-table tr:hover {
+  @apply bg-navy-900/50;
+}
+
+/* Badge styles */
+.badge {
+  @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium;
+}
+
+.badge-primary {
+  @apply bg-primary/20 text-primary;
+}
+
+.badge-secondary {
+  @apply bg-teal-500/20 text-teal-400;
+}
+
+.badge-warning {
+  @apply bg-amber-500/20 text-amber-400;
+}
+
+.badge-success {
+  @apply bg-emerald-500/20 text-emerald-400;
+}
+
+/* Progress bar */
+.progress-bar {
+  @apply h-2 w-full overflow-hidden rounded-full bg-navy-800;
+}
+
+.progress-bar-fill {
+  @apply h-full bg-gradient-to-r from-teal-500 to-blue-500;
 }

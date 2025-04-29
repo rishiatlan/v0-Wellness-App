@@ -1,233 +1,122 @@
-"use client"
-
-import { CardFooter } from "@/components/ui/card"
-
-import type React from "react"
-import { useState, useEffect } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
-import { signIn } from "@/lib/auth"
+import { redirect } from "next/navigation"
+import { cookies } from "next/headers"
+import { createClient } from "@/lib/supabase/server"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { AtSign, AlertCircle, Loader2 } from "lucide-react"
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import Image from "next/image"
-import { supabase } from "@/lib/supabase"
-import { useAuth } from "@/lib/auth-context"
 
-export default function LoginPage() {
-  const [email, setEmail] = useState("")
-  const [password, setPassword] = useState("")
-  const [error, setError] = useState("")
-  const [loading, setLoading] = useState(false)
-  const [redirecting, setRedirecting] = useState(false)
-  const [sessionChecked, setSessionChecked] = useState(false)
-  const router = useRouter()
-  const searchParams = useSearchParams()
-  const { user, session } = useAuth()
+export default async function Login({
+  searchParams,
+}: {
+  searchParams: { message: string; callbackUrl: string }
+}) {
+  const cookieStore = cookies()
+  const supabase = createClient(cookieStore)
 
-  // Check for error parameter in URL
-  useEffect(() => {
-    const errorParam = searchParams?.get("error")
-    const errorDescription = searchParams?.get("error_description")
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
 
-    // Only set errors from actual authentication failures, not from URL patterns
-    if (errorParam && errorParam !== "unauthorized_client" && !errorParam.includes("No authentication code provided")) {
-      setError(decodeURIComponent(errorParam))
-    } else if (errorDescription && errorDescription.includes("expired")) {
-      setError("Your session has expired. Please log in again.")
-    }
-
-    // Clear any "No authentication code provided" errors that might appear
-    if (error.includes("No authentication code provided")) {
-      setError("")
-    }
-  }, [searchParams])
-
-  // Helper function to check if we're in a callback flow that's missing a code
-  // const isInvalidCallbackFlow = () => {
-  //   // Check if we're in a callback URL pattern but missing the code
-  //   const path = window.location.pathname
-  //   const hasCallbackPattern = path.includes("callback") || path.includes("confirm")
-  //   const hasNoCode = !searchParams?.get("code")
-
-  //   return hasCallbackPattern && hasNoCode
-  // }
-
-  // Check if user is already logged in - only run once
-  useEffect(() => {
-    const checkSession = async () => {
-      try {
-        // Get the session directly from Supabase to ensure it's current
-        const { data } = await supabase.auth.getSession()
-
-        if (data.session) {
-          console.log("User already logged in, preparing to redirect...")
-          setRedirecting(true)
-
-          // Get the callback URL from the query parameters or use a default
-          const callbackUrl = searchParams?.get("callbackUrl") || "/daily-tracker"
-          console.log("Redirecting to:", callbackUrl)
-
-          // Use router.push for client-side navigation
-          router.push(callbackUrl)
-        }
-      } catch (error) {
-        console.error("Error checking session:", error)
-      } finally {
-        setSessionChecked(true)
-      }
-    }
-
-    if (!sessionChecked) {
-      checkSession()
-    }
-  }, [router, searchParams, sessionChecked])
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError("")
-
-    // Check if we're in an invalid callback flow
-    // if (isInvalidCallbackFlow()) {
-    //   setError("Your authentication link has expired or is invalid. Please try logging in directly.")
-    //   return
-    // }
-
-    setLoading(true)
-
-    console.log("Form submitted with email:", email)
-
-    try {
-      console.log("Attempting to sign in...")
-      const result = await signIn(email, password)
-      console.log("Sign in successful:", result)
-
-      // Check if we have a session
-      if (result.session) {
-        console.log("Session created, redirecting...")
-        setRedirecting(true)
-
-        // Get the callback URL from the query parameters or use a default
-        const callbackUrl = searchParams?.get("callbackUrl") || "/daily-tracker"
-        console.log("Redirecting to:", callbackUrl)
-
-        // Use router.push for client-side navigation
-        router.push(callbackUrl)
-      } else {
-        throw new Error("Authentication succeeded but no session was created")
-      }
-    } catch (error: any) {
-      console.error("Sign in error:", error)
-      setError(error.message || "Failed to sign in. Please try again.")
-      setRedirecting(false)
-    } finally {
-      setLoading(false)
-    }
+  // If the user is already logged in, redirect them
+  if (session) {
+    return redirect(searchParams.callbackUrl || "/")
   }
 
-  // If already logged in or redirecting, show loading
-  if (redirecting) {
-    return (
-      <div className="container flex h-screen flex-col items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p>Redirecting to dashboard...</p>
-          <Button variant="outline" size="sm" onClick={() => (window.location.href = "/daily-tracker")}>
-            Click here if not redirected
-          </Button>
-        </div>
-      </div>
-    )
-  }
+  const signIn = async (formData: FormData) => {
+    "use server"
 
-  // Show loading while checking session
-  if (!sessionChecked) {
-    return (
-      <div className="container flex h-screen flex-col items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <p className="mt-4">Checking authentication status...</p>
-      </div>
-    )
+    const email = formData.get("email") as string
+    const password = formData.get("password") as string
+    const cookieStore = cookies()
+    const supabase = createClient(cookieStore)
+
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    })
+
+    if (error) {
+      return redirect(
+        `/auth/login?message=${encodeURIComponent(error.message)}${searchParams.callbackUrl ? `&callbackUrl=${encodeURIComponent(searchParams.callbackUrl)}` : ""}`,
+      )
+    }
+
+    return redirect(searchParams.callbackUrl || "/")
   }
 
   return (
-    <div className="container mx-auto flex h-screen flex-col items-center justify-center">
+    <div className="flex min-h-screen items-center justify-center bg-navy-950 px-4 py-12">
       <div className="w-full max-w-md">
-        <div className="mb-8 flex flex-col items-center text-center">
-          <Image
-            src="https://mqvcdyzqegzqfwvesoiz.supabase.co/storage/v1/object/public/email-assets//wellness.png"
-            width={80}
-            height={80}
-            alt="Spring into Wellness Logo"
-            className="object-contain"
-            unoptimized
-          />
-          <h1 className="mt-4 text-3xl font-bold">Spring into Wellness</h1>
-          <p className="text-muted-foreground">Sign in to track your wellness journey</p>
-        </div>
-
-        <Card className="w-full">
-          <CardHeader>
-            <CardTitle>Sign In</CardTitle>
-            <CardDescription>Enter your email to sign in to your account</CardDescription>
+        <Card className="border-navy-800 bg-navy-900 text-white shadow-lg">
+          <CardHeader className="space-y-1 text-center">
+            <div className="flex justify-center mb-4">
+              <Image
+                src="/wellness-logo.png"
+                width={64}
+                height={64}
+                alt="Spring into Wellness Logo"
+                className="object-contain"
+              />
+            </div>
+            <CardTitle className="text-2xl font-bold tracking-tight">Welcome back</CardTitle>
+            <CardDescription className="text-gray-400">Sign in to your account to continue</CardDescription>
+            {searchParams?.message && (
+              <p className="mt-2 rounded-lg bg-destructive/15 p-3 text-center text-sm text-destructive">
+                {searchParams.message}
+              </p>
+            )}
           </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {error && (
-                <Alert variant="destructive">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>{error}</AlertDescription>
-                </Alert>
-              )}
-
+          <form action={signIn}>
+            <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <div className="relative">
-                  <AtSign className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="your@email.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="pl-9"
-                    required
-                  />
-                </div>
+                <Label htmlFor="email" className="text-gray-300">
+                  Email
+                </Label>
+                <Input
+                  id="email"
+                  name="email"
+                  placeholder="name@example.com"
+                  required
+                  type="email"
+                  className="border-navy-700 bg-navy-800 text-white placeholder:text-gray-500 focus:border-primary focus:ring-primary"
+                />
               </div>
-
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="password">Password</Label>
-                  <Link href="/auth/reset-password" className="text-xs text-muted-foreground hover:text-primary">
+                  <Label htmlFor="password" className="text-gray-300">
+                    Password
+                  </Label>
+                  <Link href="/auth/reset-password" className="text-sm text-primary hover:underline">
                     Forgot password?
                   </Link>
                 </div>
                 <Input
                   id="password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  name="password"
                   required
+                  type="password"
+                  className="border-navy-700 bg-navy-800 text-white placeholder:text-gray-500 focus:border-primary focus:ring-primary"
                 />
               </div>
-
-              <Button type="submit" className="w-full" disabled={loading}>
-                {loading ? "Signing in..." : "Sign In"}
+            </CardContent>
+            <CardFooter className="flex flex-col space-y-4">
+              <Button
+                type="submit"
+                className="w-full bg-gradient-to-r from-teal-500 to-blue-500 hover:from-teal-600 hover:to-blue-600"
+              >
+                Sign In
               </Button>
-            </form>
-          </CardContent>
-          <CardFooter className="flex justify-center">
-            <p className="text-sm text-muted-foreground">
-              Don't have an account?{" "}
-              <Link href="/auth/register" className="text-primary hover:underline">
-                Sign up
-              </Link>
-            </p>
-          </CardFooter>
+              <div className="text-center text-sm text-gray-400">
+                Don&apos;t have an account?{" "}
+                <Link href="/auth/register" className="text-primary hover:underline">
+                  Sign up
+                </Link>
+              </div>
+            </CardFooter>
+          </form>
         </Card>
       </div>
     </div>

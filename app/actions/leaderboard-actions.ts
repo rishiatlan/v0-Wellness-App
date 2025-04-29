@@ -4,6 +4,25 @@ import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
 import { createServiceRoleClient } from "@/lib/server-auth"
 
+// Helper function to generate a name if one doesn't exist
+function generateNameFromEmail(email: string): string {
+  if (!email) return "Unknown User"
+
+  // Extract name from email
+  const namePart = email.split("@")[0]
+
+  // Handle user-xxx@atlan.com format
+  if (namePart.startsWith("user-")) {
+    return "Atlan User " + namePart.substring(5, 9)
+  }
+
+  // Format standard email
+  return namePart
+    .split(/[._-]/)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ")
+}
+
 export async function getIndividualLeaderboard() {
   const cookieStore = cookies()
   const supabase = createServerClient(
@@ -25,16 +44,15 @@ export async function getIndividualLeaderboard() {
     const { data, error } = await serviceClient
       .from("users")
       .select("id, full_name, email, avatar_url, total_points, current_tier")
-      .not("full_name", "is", null)
-      .not("full_name", "eq", "")
       .order("total_points", { ascending: false })
       .limit(50)
 
     if (error) throw error
 
-    // Add rank to each user
+    // Ensure all users have names and add rank to each user
     return data.map((user, index) => ({
       ...user,
+      full_name: user.full_name || generateNameFromEmail(user.email),
       rank: index + 1,
       badge: index < 3 ? ["🥇", "🥈", "🥉"][index] : null,
     }))
@@ -135,15 +153,17 @@ export async function searchUsers(query: string) {
     const { data, error } = await serviceClient
       .from("users")
       .select("id, full_name, email, avatar_url, total_points, current_tier")
-      .not("full_name", "is", null)
-      .not("full_name", "eq", "")
       .or(`full_name.ilike.%${query}%,email.ilike.%${query}%`)
       .order("total_points", { ascending: false })
       .limit(10)
 
     if (error) throw error
 
-    return data
+    // Ensure all users have names
+    return data.map((user) => ({
+      ...user,
+      full_name: user.full_name || generateNameFromEmail(user.email),
+    }))
   } catch (error) {
     console.error("Error searching users:", error)
     throw error
