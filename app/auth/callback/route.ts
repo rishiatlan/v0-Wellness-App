@@ -23,6 +23,34 @@ export async function GET(request: NextRequest) {
     )
   }
 
+  if (!code) {
+    console.log("Auth callback received with no code parameter - this might be normal in some flows")
+
+    // Check if user is already authenticated
+    const cookieStore = cookies()
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get: (name) => cookieStore.get(name)?.value,
+          set: (name, value, options) => cookieStore.set(name, value, options),
+          remove: (name, options) => cookieStore.set(name, "", { ...options, maxAge: 0 }),
+        },
+      },
+    )
+
+    const { data } = await supabase.auth.getSession()
+
+    // If user already has a session, just redirect them
+    if (data.session) {
+      return NextResponse.redirect(requestUrl.origin + callbackUrl, { status: 302 })
+    }
+
+    // Otherwise, redirect to login without an error message
+    return NextResponse.redirect(`${requestUrl.origin}/auth/login`)
+  }
+
   if (code) {
     const cookieStore = cookies()
     const supabase = createServerClient(

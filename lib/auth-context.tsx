@@ -32,6 +32,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
 
+  // This will prevent unnecessary error messages during normal authentication flows
+  const clearAuthErrors = () => {
+    // Clear any URL parameters that might cause error messages
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href)
+      if (url.searchParams.has("error") && url.searchParams.get("error")?.includes("authentication code")) {
+        url.searchParams.delete("error")
+        window.history.replaceState({}, "", url.toString())
+      }
+    }
+  }
+
   // Function to refresh the session - memoized with useCallback
   const refreshSession = useCallback(async () => {
     try {
@@ -64,6 +76,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   useEffect(() => {
+    // Clear any authentication error parameters that might be in the URL
+    clearAuthErrors()
+
     // Get session from local storage
     const getInitialSession = async () => {
       console.log("Getting initial session")

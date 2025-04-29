@@ -184,37 +184,29 @@ export default function MyProgress() {
                   </div>
                 </div>
 
-                <div className="grid gap-4 sm:grid-cols-3">
+                <div className="space-y-2 rounded-lg border p-4">
+                  <h3 className="text-lg font-semibold flex items-center gap-2">
+                    <Trophy className="h-5 w-5 text-amber-500" />
+                    Your Tier Progress
+                  </h3>
+
                   {tiers.slice(1).map((tier, i) => (
-                    <div
-                      key={i}
-                      className={`rounded-lg border p-4 text-center ${
-                        currentTier > i + 1
-                          ? "border-teal-200 bg-teal-50 dark:border-teal-900/50 dark:bg-teal-900/20"
-                          : ""
-                      }`}
-                    >
-                      <div className="text-3xl mb-2">{tier.emoji}</div>
-                      <div className="font-medium">{tier.name}</div>
+                    <div key={i} className="flex items-center justify-between py-3 border-b last:border-0">
+                      <div className="flex items-center gap-3">
+                        <div className="text-xl">{tier.emoji}</div>
+                        <div className="font-medium">{tier.name}</div>
+                        {currentTier === i + 1 && (
+                          <Badge
+                            variant="outline"
+                            className="ml-2 bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300"
+                          >
+                            Current
+                          </Badge>
+                        )}
+                      </div>
                       <div className="text-sm text-muted-foreground">
                         {tier.min}–{tier.max === Number.POSITIVE_INFINITY ? "+" : tier.max} pts
                       </div>
-                      {currentTier > i + 1 && (
-                        <Badge
-                          variant="outline"
-                          className="mt-2 bg-teal-100 text-teal-800 dark:bg-teal-900/30 dark:text-teal-300"
-                        >
-                          Achieved
-                        </Badge>
-                      )}
-                      {currentTier === i + 1 && (
-                        <Badge
-                          variant="outline"
-                          className="mt-2 bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300"
-                        >
-                          Current Tier
-                        </Badge>
-                      )}
                     </div>
                   ))}
                 </div>

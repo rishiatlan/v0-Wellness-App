@@ -32,14 +32,14 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en">
+    <html lang="en" className="dark">
       <body className={inter.className}>
         <ErrorBoundary>
           <AuthProvider>
-            <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
+            <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false} forcedTheme="dark">
               <div className="flex min-h-screen flex-col">
                 <Header />
-                <main className="flex-1">
+                <main className="flex-1 mx-auto w-full max-w-7xl">
                   <ProtectedLayout>{children}</ProtectedLayout>
                 </main>
                 <Footer />

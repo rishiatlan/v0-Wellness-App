@@ -64,8 +64,8 @@
     "path": "latest",
     "glob": "latest",
     "@supabase/ssr": "latest",
-    "canvas-confetti": "latest",
-    "js-cookie": "latest"
+    "js-cookie": "latest",
+    "canvas-confetti": "latest"
   },
   "devDependencies": {
     "@types/node": "^22",

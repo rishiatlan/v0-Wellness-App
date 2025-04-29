@@ -368,7 +368,7 @@ export default function DailyTracker() {
     const hours = Math.floor(msUntilMidnight / (1000 * 60 * 60))
     const minutes = Math.floor((msUntilMidnight % (1000 * 60 * 60)) / (1000 * 60))
 
-    setTimeUntilReset(`${hours}h ${minutes}m until GMT midnight`)
+    setTimeUntilReset(`${hours}h ${minutes}m until midnight`)
 
     // Schedule the next update in 1 minute
     setTimeout(updateTimeUntilReset, 60000)
@@ -986,7 +986,7 @@ export default function DailyTracker() {
         <div>
           <h1 className="text-3xl font-bold tracking-tighter sm:text-4xl">Daily Tracker</h1>
           <p className="text-muted-foreground">
-            Track your daily wellness activities and earn points. Activities reset at midnight GMT.
+            Track your daily wellness activities and earn points. Activities reset at midnight.
           </p>
           <p className="text-sm text-muted-foreground">
             Today's date: {new Date(localDate).toLocaleDateString()} · {timeUntilReset}

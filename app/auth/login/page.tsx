@@ -31,10 +31,30 @@ export default function LoginPage() {
   // Check for error parameter in URL
   useEffect(() => {
     const errorParam = searchParams?.get("error")
-    if (errorParam) {
+    const errorDescription = searchParams?.get("error_description")
+
+    // Only set errors from actual authentication failures, not from URL patterns
+    if (errorParam && errorParam !== "unauthorized_client" && !errorParam.includes("No authentication code provided")) {
       setError(decodeURIComponent(errorParam))
+    } else if (errorDescription && errorDescription.includes("expired")) {
+      setError("Your session has expired. Please log in again.")
+    }
+
+    // Clear any "No authentication code provided" errors that might appear
+    if (error.includes("No authentication code provided")) {
+      setError("")
     }
   }, [searchParams])
+
+  // Helper function to check if we're in a callback flow that's missing a code
+  // const isInvalidCallbackFlow = () => {
+  //   // Check if we're in a callback URL pattern but missing the code
+  //   const path = window.location.pathname
+  //   const hasCallbackPattern = path.includes("callback") || path.includes("confirm")
+  //   const hasNoCode = !searchParams?.get("code")
+
+  //   return hasCallbackPattern && hasNoCode
+  // }
 
   // Check if user is already logged in - only run once
   useEffect(() => {
@@ -69,6 +89,13 @@ export default function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError("")
+
+    // Check if we're in an invalid callback flow
+    // if (isInvalidCallbackFlow()) {
+    //   setError("Your authentication link has expired or is invalid. Please try logging in directly.")
+    //   return
+    // }
+
     setLoading(true)
 
     console.log("Form submitted with email:", email)
@@ -127,80 +154,82 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="container flex h-screen flex-col items-center justify-center max-w-md">
-      <div className="mb-8 flex flex-col items-center text-center">
-        <Image
-          src="https://mqvcdyzqegzqfwvesoiz.supabase.co/storage/v1/object/public/email-assets//wellness.png"
-          width={80}
-          height={80}
-          alt="Spring into Wellness Logo"
-          className="object-contain"
-          unoptimized
-        />
-        <h1 className="mt-4 text-3xl font-bold">Spring into Wellness</h1>
-        <p className="text-muted-foreground">Sign in to track your wellness journey</p>
-      </div>
+    <div className="container mx-auto flex h-screen flex-col items-center justify-center">
+      <div className="w-full max-w-md">
+        <div className="mb-8 flex flex-col items-center text-center">
+          <Image
+            src="https://mqvcdyzqegzqfwvesoiz.supabase.co/storage/v1/object/public/email-assets//wellness.png"
+            width={80}
+            height={80}
+            alt="Spring into Wellness Logo"
+            className="object-contain"
+            unoptimized
+          />
+          <h1 className="mt-4 text-3xl font-bold">Spring into Wellness</h1>
+          <p className="text-muted-foreground">Sign in to track your wellness journey</p>
+        </div>
 
-      <Card className="w-full">
-        <CardHeader>
-          <CardTitle>Sign In</CardTitle>
-          <CardDescription>Enter your email to sign in to your account</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {error && (
-              <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
+        <Card className="w-full">
+          <CardHeader>
+            <CardTitle>Sign In</CardTitle>
+            <CardDescription>Enter your email to sign in to your account</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              {error && (
+                <Alert variant="destructive">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>{error}</AlertDescription>
+                </Alert>
+              )}
 
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <div className="relative">
-                <AtSign className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+              <div className="space-y-2">
+                <Label htmlFor="email">Email</Label>
+                <div className="relative">
+                  <AtSign className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="your@email.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="pl-9"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="password">Password</Label>
+                  <Link href="/auth/reset-password" className="text-xs text-muted-foreground hover:text-primary">
+                    Forgot password?
+                  </Link>
+                </div>
                 <Input
-                  id="email"
-                  type="email"
-                  placeholder="your@email.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="pl-9"
+                  id="password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
                   required
                 />
               </div>
-            </div>
 
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="password">Password</Label>
-                <Link href="/auth/reset-password" className="text-xs text-muted-foreground hover:text-primary">
-                  Forgot password?
-                </Link>
-              </div>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
-            </div>
-
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? "Signing in..." : "Sign In"}
-            </Button>
-          </form>
-        </CardContent>
-        <CardFooter className="flex justify-center">
-          <p className="text-sm text-muted-foreground">
-            Don't have an account?{" "}
-            <Link href="/auth/register" className="text-primary hover:underline">
-              Sign up
-            </Link>
-          </p>
-        </CardFooter>
-      </Card>
+              <Button type="submit" className="w-full" disabled={loading}>
+                {loading ? "Signing in..." : "Sign In"}
+              </Button>
+            </form>
+          </CardContent>
+          <CardFooter className="flex justify-center">
+            <p className="text-sm text-muted-foreground">
+              Don't have an account?{" "}
+              <Link href="/auth/register" className="text-primary hover:underline">
+                Sign up
+              </Link>
+            </p>
+          </CardFooter>
+        </Card>
+      </div>
     </div>
   )
 }

@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { AtSign, AlertCircle, User } from "lucide-react"
+import { AlertCircle, Mail, User } from "lucide-react"
 import Image from "next/image"
 
 export default function RegisterPage() {
@@ -107,7 +107,7 @@ export default function RegisterPage() {
             )}
 
             {success && (
-              <Alert className="bg-green-50 text-green-800 dark:bg-green-900/20 dark:text-green-300">
+              <Alert className="bg-green-900/30 text-green-300 border-green-800">
                 <AlertDescription>
                   Registration successful! Please check your email to verify your account. Redirecting to login...
                 </AlertDescription>
@@ -133,7 +133,7 @@ export default function RegisterPage() {
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <div className="relative">
-                <AtSign className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                 <Input
                   id="email"
                   type="email"
