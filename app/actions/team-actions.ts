@@ -1,6 +1,6 @@
 "use server"
 
-import { createServerClient } from "@supabase/ssr"
+import { createServerClient } from "@/lib/supabase/server"
 import { cookies } from "next/headers"
 import { revalidatePath } from "next/cache"
 import { createClient } from "@supabase/supabase-js"
@@ -19,17 +19,7 @@ const createServiceRoleClientOld = () => {
 
 export async function getTeams() {
   const cookieStore = cookies()
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get: (name) => cookieStore.get(name)?.value,
-        set: (name, value, options) => cookieStore.set(name, value, options),
-        remove: (name, options) => cookieStore.set(name, "", { ...options, maxAge: 0 }),
-      },
-    },
-  )
+  const supabase = createServerClient(cookieStore)
 
   try {
     const { data, error } = await supabase.from("teams").select("*").order("total_points", { ascending: false })
@@ -44,101 +34,63 @@ export async function getTeams() {
 }
 
 export async function getUserTeam(userId: string) {
-  const cookieStore = cookies()
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get: (name) => cookieStore.get(name)?.value,
-        set: (name, value, options) => cookieStore.set(name, value, options),
-        remove: (name, options) => cookieStore.set(name, "", { ...options, maxAge: 0 }),
-      },
-    },
-  )
-
   try {
-    // Get user with team_id
-    const { data: user, error: userError } = await supabase
+    const cookieStore = cookies()
+    const supabase = createServerClient(cookieStore)
+
+    // Get the user's team
+    const { data: userData, error: userError } = await supabase
       .from("users")
       .select("team_id")
       .eq("id", userId)
-      .maybeSingle()
+      .single()
 
-    if (userError) {
-      console.error("Error fetching user team_id:", userError)
-      throw userError
-    }
-
-    // If user has no team or user doesn't exist, return null
-    if (!user || !user.team_id) {
-      console.log("User has no team:", userId)
+    if (userError || !userData?.team_id) {
       return null
     }
 
-    // Get team details
-    const { data: team, error: teamError } = await supabase
+    // Get the team details
+    const { data: teamData, error: teamError } = await supabase
       .from("teams")
-      .select("*, creator_id")
-      .eq("id", user.team_id)
-      .maybeSingle()
+      .select("id, name, total_points")
+      .eq("id", userData.team_id)
+      .single()
 
     if (teamError) {
-      console.error("Error fetching team details:", teamError)
-      throw teamError
-    }
-
-    // If team doesn't exist (shouldn't happen, but just in case), return null
-    if (!team) {
-      console.log("Team not found for team_id:", user.team_id)
       return null
     }
 
     // Get team members
     const { data: members, error: membersError } = await supabase
       .from("users")
-      .select("id, full_name, email, avatar_url, total_points")
-      .eq("team_id", user.team_id)
+      .select("id, full_name, email, total_points")
+      .eq("team_id", userData.team_id)
 
     if (membersError) {
-      console.error("Error fetching team members:", membersError)
-      throw membersError
+      return null
     }
 
-    // Calculate team stats
+    // Calculate average points
     const avgPoints =
-      members && members.length > 0
+      members.length > 0
         ? Math.round(members.reduce((sum, member) => sum + member.total_points, 0) / members.length)
         : 0
 
     return {
-      ...team,
-      members: members || [],
+      ...teamData,
+      members,
       avgPoints,
-      memberCount: members?.length || 0,
-      isFull: (members?.length || 0) >= 5,
-      isCreator: team.creator_id === userId,
     }
-  } catch (error: any) {
-    console.error("Error in getUserTeam:", error)
-    throw new Error(`Error fetching team data: ${error.message}`)
+  } catch (error) {
+    console.error("Error fetching user team:", error)
+    return null
   }
 }
 
 // Update the createTeam function to enforce a maximum of 5 members per team
 export async function createTeam(userId: string, teamName: string, bannerUrl?: string) {
   const cookieStore = cookies()
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get: (name) => cookieStore.get(name)?.value,
-        set: (name, value, options) => cookieStore.set(name, value, options),
-        remove: (name, options) => cookieStore.set(name, "", { ...options, maxAge: 0 }),
-      },
-    },
-  )
+  const supabase = createServerClient(cookieStore)
 
   try {
     // Check if user already has a team
@@ -214,17 +166,7 @@ export async function createTeam(userId: string, teamName: string, bannerUrl?: s
 // Update the joinTeam function to enforce a maximum of 5 members per team
 export async function joinTeam(userId: string, teamId: string) {
   const cookieStore = cookies()
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get: (name) => cookieStore.get(name)?.value,
-        set: (name, value, options) => cookieStore.set(name, value, options),
-        remove: (name, options) => cookieStore.set(name, "", { ...options, maxAge: 0 }),
-      },
-    },
-  )
+  const supabase = createServerClient(cookieStore)
 
   try {
     // Check if user already has a team
@@ -276,17 +218,7 @@ export async function joinTeam(userId: string, teamId: string) {
 
 export async function leaveTeam(userId: string) {
   const cookieStore = cookies()
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get: (name) => cookieStore.get(name)?.value,
-        set: (name, value, options) => cookieStore.set(name, value, options),
-        remove: (name, options) => cookieStore.set(name, "", { ...options, maxAge: 0 }),
-      },
-    },
-  )
+  const supabase = createServerClient(cookieStore)
 
   try {
     // Get user's current team
@@ -363,17 +295,7 @@ export async function leaveTeam(userId: string) {
 
 export async function assignRandomTeam(userId: string) {
   const cookieStore = cookies()
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get: (name) => cookieStore.get(name)?.value,
-        set: (name, value, options) => cookieStore.set(name, value, options),
-        remove: (name, options) => cookieStore.set(name, "", { ...options, maxAge: 0 }),
-      },
-    },
-  )
+  const supabase = createServerClient(cookieStore)
 
   try {
     // Check if user already has a team
@@ -434,17 +356,7 @@ export async function assignRandomTeam(userId: string) {
 
 export async function updateTeamBanner(teamId: string, bannerUrl: string) {
   const cookieStore = cookies()
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get: (name) => cookieStore.get(name)?.value,
-        set: (name, value, options) => cookieStore.set(name, value, options),
-        remove: (name, options) => cookieStore.set(name, "", { ...options, maxAge: 0 }),
-      },
-    },
-  )
+  const supabase = createServerClient(cookieStore)
 
   try {
     const { error } = await supabase.from("teams").update({ banner_url: bannerUrl }).eq("id", teamId)
@@ -461,17 +373,7 @@ export async function updateTeamBanner(teamId: string, bannerUrl: string) {
 
 export async function uploadTeamImage(teamId: string, file: File) {
   const cookieStore = cookies()
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get: (name) => cookieStore.get(name)?.value,
-        set: (name, value, options) => cookieStore.set(name, value, options),
-        remove: (name, options) => cookieStore.set(name, "", { ...options, maxAge: 0 }),
-      },
-    },
-  )
+  const supabase = createServerClient(cookieStore)
 
   try {
     // Create a unique file name
@@ -505,17 +407,7 @@ export async function uploadTeamImage(teamId: string, file: File) {
 
 export async function getTeamAchievements(teamId: string) {
   const cookieStore = cookies()
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get: (name) => cookieStore.get(name)?.value,
-        set: (name, value, options) => cookieStore.set(name, value, options),
-        remove: (name, options) => cookieStore.set(name, "", { ...options, maxAge: 0 }),
-      },
-    },
-  )
+  const supabase = createServerClient(cookieStore)
 
   try {
     const { data, error } = await supabase
@@ -535,17 +427,7 @@ export async function getTeamAchievements(teamId: string) {
 
 export async function getWellnessWednesdays(teamId: string) {
   const cookieStore = cookies()
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get: (name) => cookieStore.get(name)?.value,
-        set: (name, value, options) => cookieStore.set(name, value, options),
-        remove: (name, options) => cookieStore.set(name, "", { ...options, maxAge: 0 }),
-      },
-    },
-  )
+  const supabase = createServerClient(cookieStore)
 
   try {
     const { data, error } = await supabase
@@ -782,92 +664,63 @@ export async function getTeamRank(teamId: string) {
   }
 }
 
-export async function getTopTeams(limit = 20) {
-  const serviceClient = createServiceRoleClient()
-
+export async function getTopTeams(limit = 5) {
   try {
-    // Get top teams by points
-    const { data: teams, error } = await serviceClient
+    const cookieStore = cookies()
+    const supabase = createServerClient(cookieStore)
+
+    const { data, error } = await supabase
       .from("teams")
-      .select("id, name, banner_url, total_points")
+      .select("id, name, total_points")
       .order("total_points", { ascending: false })
       .limit(limit)
 
-    if (error) throw error
-
-    if (!teams || teams.length === 0) {
+    if (error) {
       return []
     }
 
-    // Get member count for each team
-    const teamsWithMemberCount = await Promise.all(
-      teams.map(async (team) => {
-        const { count, error: countError } = await serviceClient
-          .from("users")
-          .select("id", { count: "exact" })
-          .eq("team_id", team.id)
-
-        if (countError) throw countError
-
-        return {
-          ...team,
-          members: count || 0,
-        }
-      }),
-    )
-
-    return teamsWithMemberCount
-  } catch (error: any) {
-    console.error("Error getting top teams:", error)
+    return data
+  } catch (error) {
+    console.error("Error fetching top teams:", error)
     return []
   }
 }
 
 // Add a new function to get all teams with their members
 export async function getAllTeamsWithMembers() {
-  const serviceClient = createServiceRoleClient()
-
   try {
-    // Get all teams - don't select creator_id since it might not exist yet
-    const { data: teams, error } = await serviceClient
+    const cookieStore = cookies()
+    const supabase = createServerClient(cookieStore)
+
+    // Get all teams
+    const { data: teams, error: teamsError } = await supabase
       .from("teams")
-      .select("id, name, banner_url, total_points")
-      .order("total_points", { ascending: false })
+      .select("id, name, total_points")
+      .order("name")
 
-    if (error) throw error
-
-    if (!teams || teams.length === 0) {
+    if (teamsError || !teams) {
       return []
     }
 
-    // Get members for each team
+    // For each team, get the members
     const teamsWithMembers = await Promise.all(
       teams.map(async (team) => {
-        const { data: members, error: membersError } = await serviceClient
+        const { data: members, error: membersError } = await supabase
           .from("users")
-          .select("id, full_name, email, avatar_url, total_points")
+          .select("id, full_name, email, total_points")
           .eq("team_id", team.id)
-
-        if (membersError) throw membersError
-
-        // Try to find the creator (first member) if creator_id doesn't exist
-        let creator_id = null
-        if (members && members.length > 0) {
-          creator_id = members[0].id // Use first member as fallback creator
-        }
 
         return {
           ...team,
-          creator_id, // Add creator_id from our calculation
-          members: members || [],
-          memberCount: members?.length || 0,
+          members: membersError ? [] : members,
+          memberCount: membersError ? 0 : members.length,
         }
       }),
     )
 
     return teamsWithMembers
-  } catch (error: any) {
-    console.error("Error getting all teams with members:", error)
+  } catch (error) {
+    console.error("Error fetching all teams with members:", error)
     return []
   }
 }

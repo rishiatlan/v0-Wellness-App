@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { usePathname, useRouter } from "next/navigation"
+import { usePathname } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { Menu, LogOut, User, Shield } from "lucide-react"
@@ -27,7 +27,7 @@ const getNavigation = (userEmail) => {
     { name: "Home", href: "/" },
     { name: "Daily Tracker", href: "/daily-tracker" },
     { name: "My Progress", href: "/my-progress" },
-    // Team Challenge link removed
+    { name: "Team Challenge", href: "/team-challenge" }, // Re-enabled team challenge link
     { name: "Leaderboard", href: "/leaderboard" },
   ]
 
@@ -43,18 +43,14 @@ export default function Header() {
   const pathname = usePathname()
   const isMobile = useMobile()
   const { user, loading, refreshSession } = useAuth()
-  const router = useRouter()
-
-  // Redirect from team challenge page
-  useEffect(() => {
-    if (pathname === "/team-challenge") {
-      router.push("/")
-    }
-  }, [pathname, router])
 
   // Refresh session when header mounts to ensure we have the latest auth state
   useEffect(() => {
-    refreshSession()
+    try {
+      refreshSession()
+    } catch (error) {
+      console.error("Error refreshing session:", error)
+    }
   }, [refreshSession])
 
   const handleSignOut = async () => {
@@ -66,7 +62,7 @@ export default function Header() {
     }
   }
 
-  const isAuthPage = pathname.startsWith("/auth/")
+  const isAuthPage = pathname?.startsWith("/auth/")
 
   // Don't show navigation on auth pages
   if (isAuthPage) {

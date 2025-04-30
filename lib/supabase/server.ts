@@ -1,9 +1,11 @@
+"use server"
+
 import { createServerClient as createSupabaseServerClient } from "@supabase/ssr"
 import type { cookies } from "next/headers"
 import type { Database } from "@/types/supabase"
 
 // Create a Supabase client for server components (safe for /app directory)
-export const createClient = (cookieStore: ReturnType<typeof cookies>) => {
+export const createServerClient = (cookieStore: ReturnType<typeof cookies>) => {
   try {
     // Check if required environment variables are available
     if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
@@ -31,3 +33,6 @@ export const createClient = (cookieStore: ReturnType<typeof cookies>) => {
     throw error
   }
 }
+
+// Also export as createClient for compatibility
+export const createClient = createServerClient
