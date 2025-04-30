@@ -2,12 +2,13 @@
 
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Loader2, Trophy, Award, Users } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { getUserTeam, getTopTeams, getAllTeamsWithMembers } from "@/app/actions/team-actions"
+import { getAvatarUrl, getInitials } from "@/lib/avatar-utils"
 
 export default function TeamChallenge() {
   const { user, loading: authLoading } = useAuth()
@@ -78,21 +79,6 @@ export default function TeamChallenge() {
     )
   }
 
-  if (error) {
-    return (
-      <div className="container py-8">
-        <Card>
-          <CardHeader>
-            <CardTitle>Error</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p>{error}</p>
-          </CardContent>
-        </Card>
-      </div>
-    )
-  }
-
   return (
     <div className="container py-8">
       <div className="mb-8">
@@ -110,35 +96,37 @@ export default function TeamChallenge() {
         </TabsList>
 
         <TabsContent value="all-teams" className="space-y-4">
-          {allTeams.length > 0 ? (
+          {allTeams && allTeams.length > 0 ? (
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
               {allTeams.map((team) => (
                 <TeamCard key={team.id} team={team} />
               ))}
             </div>
           ) : (
-            <Card>
+            <Card className="bg-navy-950 border-navy-800">
               <CardHeader>
-                <CardTitle>No Teams Found</CardTitle>
+                <CardTitle className="text-white">No Teams Found</CardTitle>
               </CardHeader>
               <CardContent>
-                <p>There are currently no teams in the challenge.</p>
+                <p className="text-slate-300">There are currently no teams in the challenge.</p>
               </CardContent>
             </Card>
           )}
         </TabsContent>
 
         <TabsContent value="leaderboard">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
+          <Card className="bg-navy-950 border-navy-800">
+            <CardHeader className="border-b border-navy-800">
+              <CardTitle className="flex items-center gap-2 text-white">
                 <Trophy className="h-5 w-5 text-amber-500" />
                 <span>Team Leaderboard</span>
               </CardTitle>
-              <CardDescription>Top performing teams in the wellness challenge</CardDescription>
+              <CardDescription className="text-slate-400">
+                Top performing teams in the wellness challenge
+              </CardDescription>
             </CardHeader>
-            <CardContent>
-              {allTeams.length > 0 ? (
+            <CardContent className="pt-6">
+              {allTeams && allTeams.length > 0 ? (
                 <div className="space-y-4">
                   {allTeams
                     .sort((a, b) => b.total_points - a.total_points)
@@ -146,7 +134,9 @@ export default function TeamChallenge() {
                       <div
                         key={team.id}
                         className={`flex items-center justify-between rounded-lg border p-4 ${
-                          index < 3 ? "bg-gradient-to-r from-navy-900/50 to-navy-800/50" : ""
+                          index < 3
+                            ? "bg-gradient-to-r from-navy-900/50 to-navy-800/50 border-navy-700"
+                            : "border-navy-800"
                         }`}
                       >
                         <div className="flex items-center gap-4">
@@ -163,14 +153,23 @@ export default function TeamChallenge() {
                           >
                             {index + 1}
                           </div>
+                          <Avatar className="h-10 w-10 border-2 border-navy-700">
+                            <AvatarImage
+                              src={team.banner_url || getAvatarUrl(team.id || `team-${index}`, "team")}
+                              alt={team.name || `Team ${index + 1}`}
+                            />
+                            <AvatarFallback className="bg-navy-700 text-white">
+                              {getInitials(team.name || `T${index + 1}`)}
+                            </AvatarFallback>
+                          </Avatar>
                           <div>
-                            <div className="font-medium">{team.name}</div>
-                            <div className="text-xs text-muted-foreground">{team.memberCount} members</div>
+                            <div className="font-medium text-white">{team.name || "Team " + (index + 1)}</div>
+                            <div className="text-xs text-slate-400">{team.memberCount || 0} members</div>
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
-                          <Badge variant="outline" className="bg-blue-900/20 text-blue-400">
-                            {team.total_points} pts
+                          <Badge variant="outline" className="bg-blue-900/20 text-blue-400 border-blue-700">
+                            {team.total_points || 0} pts
                           </Badge>
                           {index === 0 && <Trophy className="h-4 w-4 text-amber-500" />}
                         </div>
@@ -178,7 +177,7 @@ export default function TeamChallenge() {
                     ))}
                 </div>
               ) : (
-                <p>No teams available for the leaderboard.</p>
+                <p className="text-center py-8 text-slate-400">No teams available for the leaderboard.</p>
               )}
             </CardContent>
           </Card>
@@ -188,66 +187,90 @@ export default function TeamChallenge() {
           {user ? (
             userTeam ? (
               <div className="grid gap-6 md:grid-cols-2">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>{userTeam.name}</CardTitle>
-                    <CardDescription>Your wellness team</CardDescription>
+                <Card className="bg-navy-950 border-navy-800">
+                  <CardHeader className="border-b border-navy-800">
+                    <div className="flex items-center gap-4">
+                      <Avatar className="h-12 w-12 border-2 border-navy-700">
+                        <AvatarImage
+                          src={userTeam.banner_url || getAvatarUrl(userTeam.id, "team")}
+                          alt={userTeam.name}
+                        />
+                        <AvatarFallback className="bg-navy-700 text-white">{getInitials(userTeam.name)}</AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <CardTitle className="text-white">{userTeam.name}</CardTitle>
+                        <CardDescription className="text-slate-400">Your wellness team</CardDescription>
+                      </div>
+                    </div>
                   </CardHeader>
-                  <CardContent>
+                  <CardContent className="pt-6">
                     <div className="mb-4 flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <Trophy className="h-5 w-5 text-amber-500" />
-                        <span className="font-medium">Team Points:</span>
+                        <span className="font-medium text-white">Team Points:</span>
                       </div>
-                      <Badge className="bg-blue-900/20 text-blue-400">{userTeam.total_points} points</Badge>
+                      <Badge className="bg-blue-900/20 text-blue-400 border-blue-700">
+                        {userTeam.total_points} points
+                      </Badge>
                     </div>
 
                     <div className="space-y-4">
-                      <h3 className="text-sm font-medium">Team Members</h3>
+                      <h3 className="text-sm font-medium text-white">Team Members</h3>
                       {userTeam.members && userTeam.members.length > 0 ? (
                         userTeam.members.map((member) => (
-                          <div key={member.id} className="flex items-center justify-between rounded-lg border p-3">
+                          <div
+                            key={member.id}
+                            className="flex items-center justify-between rounded-lg border border-navy-800 p-3"
+                          >
                             <div className="flex items-center gap-3">
                               <Avatar>
-                                <AvatarFallback>{member.full_name?.charAt(0) || "U"}</AvatarFallback>
+                                <AvatarImage
+                                  src={member.avatar_url || getAvatarUrl(member.id || member.email, "user")}
+                                  alt={member.full_name || "User"}
+                                />
+                                <AvatarFallback className="bg-navy-700 text-white">
+                                  {getInitials(member.full_name || member.email)}
+                                </AvatarFallback>
                               </Avatar>
                               <div>
-                                <div className="font-medium">{member.full_name || "Unknown User"}</div>
-                                <div className="text-xs text-muted-foreground">{member.email}</div>
+                                <div className="font-medium text-white">{member.full_name || "Unknown User"}</div>
+                                <div className="text-xs text-slate-400">{member.email}</div>
                               </div>
                             </div>
-                            <Badge variant="outline">{member.total_points} pts</Badge>
+                            <Badge variant="outline" className="bg-blue-900/20 text-blue-400 border-blue-700">
+                              {member.total_points} pts
+                            </Badge>
                           </div>
                         ))
                       ) : (
-                        <p>No team members found.</p>
+                        <p className="text-slate-400">No team members found.</p>
                       )}
                     </div>
                   </CardContent>
                 </Card>
 
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
+                <Card className="bg-navy-950 border-navy-800">
+                  <CardHeader className="border-b border-navy-800">
+                    <CardTitle className="flex items-center gap-2 text-white">
                       <Award className="h-5 w-5 text-primary" />
                       <span>Team Stats</span>
                     </CardTitle>
                   </CardHeader>
-                  <CardContent>
+                  <CardContent className="pt-6">
                     <div className="grid grid-cols-2 gap-4">
-                      <div className="rounded-lg bg-blue-900/20 p-4 text-center">
+                      <div className="rounded-lg bg-blue-900/20 p-4 text-center border border-blue-800">
                         <div className="text-2xl font-bold text-blue-400">{userTeam.total_points}</div>
                         <div className="text-sm text-blue-300">Total Points</div>
                       </div>
-                      <div className="rounded-lg bg-teal-900/20 p-4 text-center">
+                      <div className="rounded-lg bg-teal-900/20 p-4 text-center border border-teal-800">
                         <div className="text-2xl font-bold text-teal-400">{userTeam.avgPoints}</div>
                         <div className="text-sm text-teal-300">Avg Points</div>
                       </div>
-                      <div className="rounded-lg bg-emerald-900/20 p-4 text-center">
+                      <div className="rounded-lg bg-emerald-900/20 p-4 text-center border border-emerald-800">
                         <div className="text-2xl font-bold text-emerald-400">{userTeam.members?.length || 0}/5</div>
                         <div className="text-sm text-emerald-300">Members</div>
                       </div>
-                      <div className="rounded-lg bg-purple-900/20 p-4 text-center">
+                      <div className="rounded-lg bg-purple-900/20 p-4 text-center border border-purple-800">
                         <div className="text-2xl font-bold text-purple-400">
                           {allTeams.findIndex((t) => t.id === userTeam.id) + 1 || "-"}
                         </div>
@@ -258,24 +281,24 @@ export default function TeamChallenge() {
                 </Card>
               </div>
             ) : (
-              <Card>
+              <Card className="bg-navy-950 border-navy-800">
                 <CardHeader>
-                  <CardTitle>No Team Found</CardTitle>
-                  <CardDescription>You are not currently part of any team</CardDescription>
+                  <CardTitle className="text-white">No Team Found</CardTitle>
+                  <CardDescription className="text-slate-400">You are not currently part of any team</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <p>Contact your administrator to be assigned to a team.</p>
+                  <p className="text-slate-300">Contact your administrator to be assigned to a team.</p>
                 </CardContent>
               </Card>
             )
           ) : (
-            <Card>
+            <Card className="bg-navy-950 border-navy-800">
               <CardHeader>
-                <CardTitle>Not Logged In</CardTitle>
-                <CardDescription>Please log in to view your team</CardDescription>
+                <CardTitle className="text-white">Not Logged In</CardTitle>
+                <CardDescription className="text-slate-400">Please log in to view your team</CardDescription>
               </CardHeader>
               <CardContent>
-                <p>You need to be logged in to view your team information.</p>
+                <p className="text-slate-300">You need to be logged in to view your team information.</p>
               </CardContent>
             </Card>
           )}
@@ -287,30 +310,47 @@ export default function TeamChallenge() {
 
 function TeamCard({ team }) {
   return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="flex items-center justify-between">
-          <span>{team.name}</span>
-          <Badge className="bg-blue-900/20 text-blue-400">{team.total_points} pts</Badge>
-        </CardTitle>
-        <CardDescription>{team.memberCount} team members</CardDescription>
+    <Card className="bg-navy-950 border-navy-800">
+      <CardHeader className="pb-2 border-b border-navy-800">
+        <div className="flex items-center gap-3 mb-2">
+          <Avatar className="h-10 w-10 border-2 border-navy-700">
+            <AvatarImage
+              src={team.banner_url || getAvatarUrl(team.id || team.name, "team")}
+              alt={team.name || "Team"}
+            />
+            <AvatarFallback className="bg-navy-700 text-white">{getInitials(team.name || "Team")}</AvatarFallback>
+          </Avatar>
+          <CardTitle className="flex items-center justify-between text-white">
+            <span>{team.name || "Unnamed Team"}</span>
+          </CardTitle>
+        </div>
+        <div className="flex items-center justify-between">
+          <CardDescription className="text-slate-400">{team.memberCount || 0} team members</CardDescription>
+          <Badge className="bg-blue-900/20 text-blue-400 border-blue-700">{team.total_points || 0} pts</Badge>
+        </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="pt-4">
         <div className="space-y-2">
           {team.members && team.members.length > 0 ? (
             team.members.map((member) => (
               <div key={member.id} className="flex items-center gap-2">
                 <Avatar className="h-6 w-6">
-                  <AvatarFallback className="text-xs">{member.full_name?.charAt(0) || "U"}</AvatarFallback>
+                  <AvatarImage
+                    src={member.avatar_url || getAvatarUrl(member.id || member.email, "user")}
+                    alt={member.full_name || "User"}
+                  />
+                  <AvatarFallback className="text-xs bg-navy-700 text-white">
+                    {getInitials(member.full_name || member.email)}
+                  </AvatarFallback>
                 </Avatar>
                 <div className="flex flex-1 items-center justify-between">
-                  <span className="text-sm">{member.full_name || "Unknown User"}</span>
-                  <span className="text-xs text-muted-foreground">{member.total_points} pts</span>
+                  <span className="text-sm text-white">{member.full_name || "Unknown User"}</span>
+                  <span className="text-xs text-slate-400">{member.total_points || 0} pts</span>
                 </div>
               </div>
             ))
           ) : (
-            <div className="flex items-center justify-center py-2 text-sm text-muted-foreground">
+            <div className="flex items-center justify-center py-2 text-sm text-slate-400">
               <Users className="mr-2 h-4 w-4" />
               No members
             </div>

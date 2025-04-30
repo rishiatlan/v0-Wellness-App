@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge"
 import { Loader2 } from "lucide-react"
 import Link from "next/link"
 import { Shield } from "lucide-react"
+import { getAvatarUrl, getInitials } from "@/lib/avatar-utils"
 
 const isAdmin = (email: string | null | undefined) => {
   if (!email) return false
@@ -81,10 +82,16 @@ export default function ProfilePage() {
           <CardContent className="space-y-6">
             <div className="flex items-center gap-4">
               <Avatar className="h-16 w-16">
+                <img
+                  src={user.id ? getAvatarUrl(user.id) : undefined}
+                  alt={`${user.user_metadata?.full_name || user.email?.split("@")[0]}'s avatar`}
+                  onError={(e) => {
+                    // If image fails to load, fallback will be shown
+                    e.currentTarget.style.display = "none"
+                  }}
+                />
                 <AvatarFallback className="text-xl bg-primary text-primary-foreground">
-                  {user.user_metadata?.full_name
-                    ? user.user_metadata.full_name.charAt(0).toUpperCase()
-                    : user.email?.charAt(0).toUpperCase()}
+                  {getInitials(user.user_metadata?.full_name || user.email)}
                 </AvatarFallback>
               </Avatar>
               <div>

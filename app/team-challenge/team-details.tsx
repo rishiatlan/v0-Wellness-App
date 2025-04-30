@@ -4,6 +4,7 @@ import { CardDescription } from "@/components/ui/card"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { getAvatarUrl, getInitials } from "@/lib/avatar-utils"
 
 export const TeamDetails = ({ team, users }: { team: any; users: any[] }) => {
   const teamMembers = users.filter((user) => user.team_id === team.id)
@@ -21,8 +22,11 @@ export const TeamDetails = ({ team, users }: { team: any; users: any[] }) => {
             {teamMembers.map((member) => (
               <div key={member.id} className="flex items-center gap-3">
                 <Avatar>
-                  <AvatarImage src={member.avatar_url || "/placeholder.svg"} alt={member.full_name} />
-                  <AvatarFallback>{member.full_name.charAt(0)}</AvatarFallback>
+                  <AvatarImage
+                    src={getAvatarUrl(member.full_name, member.avatar_url) || "/placeholder.svg"}
+                    alt={member.full_name}
+                  />
+                  <AvatarFallback>{getInitials(member.full_name)}</AvatarFallback>
                 </Avatar>
                 <div>
                   <div className="font-medium">{member.full_name}</div>

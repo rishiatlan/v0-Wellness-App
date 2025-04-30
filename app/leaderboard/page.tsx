@@ -16,6 +16,7 @@ import {
   searchTeams,
 } from "@/app/actions/leaderboard-actions"
 import { Button } from "@/components/ui/button"
+import { getAvatarUrl, getInitials } from "@/lib/avatar-utils"
 
 // Helper function to extract name from email
 function extractNameFromEmail(email: string): string {
@@ -240,9 +241,12 @@ export default function Leaderboard() {
                         {individual.rank}
                       </div>
                       <Avatar className="h-10 w-10 border-2 border-navy-700">
-                        <AvatarImage src={individual.avatar_url || "/placeholder.svg"} alt={individual.full_name} />
+                        <AvatarImage
+                          src={individual.avatar_url || getAvatarUrl(individual.id || individual.email, "user")}
+                          alt={individual.full_name || extractNameFromEmail(individual.email)}
+                        />
                         <AvatarFallback className="bg-navy-700 text-white">
-                          {individual.full_name ? individual.full_name.charAt(0) : "U"}
+                          {getInitials(individual.full_name || individual.email)}
                         </AvatarFallback>
                       </Avatar>
                       <div>
@@ -280,35 +284,51 @@ export default function Leaderboard() {
             </CardHeader>
             <CardContent className="pt-6">
               <div className="space-y-4">
-                {filteredTeams.map((team) => (
+                {filteredTeams.map((team, index) => (
                   <div
                     key={team.id}
-                    className={`flex items-center justify-between rounded-lg border p-3 ${
-                      team.rank <= 3 ? "bg-amber-50 dark:bg-amber-900/10" : ""
+                    className={`flex items-center justify-between rounded-lg border p-4 ${
+                      index < 3
+                        ? "bg-gradient-to-r from-navy-900 to-navy-800 border-navy-700"
+                        : "bg-navy-900/60 border-navy-800"
                     }`}
                   >
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted">{team.rank}</div>
-                      <Avatar>
-                        <AvatarImage src={team.banner_url || "/placeholder.svg"} alt={team.name} />
-                        <AvatarFallback>{team.name.charAt(0)}</AvatarFallback>
+                    <div className="flex items-center gap-4">
+                      <div
+                        className={`flex h-10 w-10 items-center justify-center rounded-full font-semibold ${
+                          index === 0
+                            ? "bg-amber-500 text-black"
+                            : index === 1
+                              ? "bg-slate-300 text-black"
+                              : index === 2
+                                ? "bg-amber-700 text-white"
+                                : "bg-navy-800 text-white"
+                        }`}
+                      >
+                        {index + 1}
+                      </div>
+                      <Avatar className="h-10 w-10 border-2 border-navy-700">
+                        <AvatarImage
+                          src={team.banner_url || getAvatarUrl(team.id || `team-${index}`, "team")}
+                          alt={team.name || `Team ${index + 1}`}
+                        />
+                        <AvatarFallback className="bg-navy-700 text-white">
+                          {getInitials(team.name || `T${index + 1}`)}
+                        </AvatarFallback>
                       </Avatar>
                       <div>
-                        <div className="font-medium flex items-center gap-1">
-                          {team.name}
-                          {team.badge && <span>{team.badge}</span>}
+                        <div className="font-medium text-white flex items-center gap-1">
+                          {team.name || `Team ${index + 1}`}
+                          {index < 3 && <span className="ml-1">{["🥇", "🥈", "🥉"][index]}</span>}
                         </div>
-                        <div className="text-sm text-muted-foreground">{team.members} members</div>
+                        <div className="text-sm text-slate-400">{team.members || 0} members</div>
                       </div>
                     </div>
                     <div className="flex flex-col items-end">
-                      <Badge
-                        variant="outline"
-                        className="bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300"
-                      >
-                        {team.total_points} pts
+                      <Badge variant="outline" className="bg-blue-900/30 text-blue-300 border-blue-700">
+                        {team.total_points || 0} pts
                       </Badge>
-                      <span className="text-xs text-muted-foreground mt-1">
+                      <span className="text-xs text-slate-400 mt-1">
                         Avg: {Math.round(team.total_points / (team.members || 1))} pts/member
                       </span>
                     </div>
@@ -316,7 +336,7 @@ export default function Leaderboard() {
                 ))}
 
                 {filteredTeams.length === 0 && (
-                  <div className="text-center py-8 text-muted-foreground">No results found for "{searchQuery}"</div>
+                  <div className="text-center py-8 text-slate-400">No results found for "{searchQuery}"</div>
                 )}
               </div>
             </CardContent>
