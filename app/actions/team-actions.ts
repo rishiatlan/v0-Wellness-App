@@ -21,37 +21,76 @@ const createServiceRoleClientOld = () => {
 
 // This function is the main one we need to fix
 export async function getTeams() {
-  const supabase = createServerActionClient<Database>({ cookies })
-
   try {
-    const { data, error } = await supabase.from("teams").select("*").order("total_points", { ascending: false })
+    // Use the service role client for more reliable access
+    const serviceClient = createServiceRoleClient()
+    console.log("Fetching teams with service role client")
+
+    const { data, error } = await serviceClient.from("teams").select("*").order("total_points", { ascending: false })
 
     if (error) {
       console.error("Error fetching teams:", error)
-      throw new Error("Failed to fetch teams")
+      throw error
     }
 
+    console.log(`Successfully fetched ${data?.length || 0} teams`)
     return data || []
-  } catch (error) {
-    console.error("Exception in getTeams:", error)
-    return []
+  } catch (error: any) {
+    console.error("Error in getTeams:", error)
+    throw new Error(`Error fetching teams: ${error.message}`)
   }
 }
 
 export async function getUserTeam(userId: string) {
-  const supabase = createServerActionClient<Database>({ cookies })
-
   try {
-    const { data, error } = await supabase.from("users").select("team_id, teams(*)").eq("id", userId).single()
+    const cookieStore = cookies()
+    const supabase = createServerClient(cookieStore)
 
-    if (error) {
-      console.error("Error fetching user team:", error)
+    // Get the user's team
+    const { data: userData, error: userError } = await supabase
+      .from("users")
+      .select("team_id")
+      .eq("id", userId)
+      .single()
+
+    if (userError || !userData?.team_id) {
       return null
     }
 
-    return data?.teams || null
+    // Get the team details
+    const { data: teamData, error: teamError } = await supabase
+      .from("teams")
+      .select("id, name, total_points")
+      .eq("id", userData.team_id)
+      .single()
+
+    if (teamError) {
+      return null
+    }
+
+    // Get team members
+    const { data: members, error: membersError } = await supabase
+      .from("users")
+      .select("id, full_name, email, total_points")
+      .eq("team_id", userData.team_id)
+
+    if (membersError) {
+      return null
+    }
+
+    // Calculate average points
+    const avgPoints =
+      members.length > 0
+        ? Math.round(members.reduce((sum, member) => sum + member.total_points, 0) / members.length)
+        : 0
+
+    return {
+      ...teamData,
+      members,
+      avgPoints,
+    }
   } catch (error) {
-    console.error("Exception in getUserTeam:", error)
+    console.error("Error fetching user team:", error)
     return null
   }
 }
@@ -593,65 +632,73 @@ export async function getTopTeams(limit = 5) {
   }
 }
 
-// Update the getAllTeamsWithMembers function to use the service role client
+// Update the getAllTeamsWithMembers function to be more robust
 export async function getAllTeamsWithMembers() {
   try {
-    // Use the service role client for more reliable access
-    const serviceClient = createServiceRoleClient()
-    console.log("Fetching all teams with members using service role client")
+    // Use cookies() to get the cookie store
+    const cookieStore = cookies()
 
-    // Get all teams
-    const { data: teams, error: teamsError } = await serviceClient
+    // Create a server client with the cookie store
+    const supabase = createServerClient(cookieStore)
+
+    console.log("Fetching teams with server client")
+
+    // First, get all teams
+    const { data: teams, error: teamsError } = await supabase
       .from("teams")
       .select("id, name, total_points, banner_url, creator_id")
       .order("total_points", { ascending: false })
 
+    // Handle errors explicitly
     if (teamsError) {
       console.error("Error fetching teams:", teamsError)
-      throw new Error(`Failed to fetch teams: ${teamsError.message}`)
+      return [] // Return empty array instead of throwing
     }
 
+    // If no teams found, return empty array
     if (!teams || teams.length === 0) {
-      console.log("No teams found in database")
+      console.log("No teams found")
       return []
     }
 
-    console.log(`Found ${teams.length} teams, fetching members for each team`)
+    console.log(`Found ${teams.length} teams, now fetching members`)
 
-    // For each team, get the members
-    const teamsWithMembers = await Promise.all(
-      teams.map(async (team) => {
-        const { data: members, error: membersError } = await serviceClient
+    // Process each team to get its members
+    const teamsWithMembers = []
+
+    for (const team of teams) {
+      try {
+        // Get members for this team
+        const { data: members, error: membersError } = await supabase
           .from("users")
           .select("id, full_name, email, total_points, avatar_url")
           .eq("team_id", team.id)
 
-        if (membersError) {
-          console.error(`Error fetching members for team ${team.id}:`, membersError)
-          return {
-            ...team,
-            members: [],
-            memberCount: 0,
-          }
-        }
-
-        return {
+        // Add team with its members to the result array
+        teamsWithMembers.push({
           ...team,
-          members: members || [],
-          memberCount: members?.length || 0,
-        }
-      }),
-    )
+          members: membersError ? [] : members || [],
+          memberCount: membersError ? 0 : members?.length || 0,
+        })
+      } catch (memberError) {
+        console.error(`Error processing members for team ${team.id}:`, memberError)
+        // Still add the team, but without members
+        teamsWithMembers.push({
+          ...team,
+          members: [],
+          memberCount: 0,
+        })
+      }
+    }
 
     console.log(`Successfully processed ${teamsWithMembers.length} teams with their members`)
     return teamsWithMembers
-  } catch (error: any) {
+  } catch (error) {
     console.error("Error in getAllTeamsWithMembers:", error)
-    throw new Error(`Error fetching teams with members: ${error.message}`)
+    return [] // Return empty array instead of throwing
   }
 }
 
-// Update the sendTeamInvite function to enforce a maximum of 5 members per team
 export async function sendTeamInvite(teamId: string, inviterUserId: string, inviteeEmail: string) {
   const serviceClient = createServiceRoleClient()
 

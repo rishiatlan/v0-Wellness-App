@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Loader2, Trophy, Award, Users, AlertCircle, RefreshCcw } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
-import { getUserTeam, getAllTeamsWithMembers } from "@/app/actions/team-actions"
+import { getUserTeam } from "@/app/actions/team-actions"
 import { getAvatarUrl, getInitials } from "@/lib/avatar-utils"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -25,14 +25,20 @@ export default function TeamChallenge() {
       setLoading(true)
       setError(null)
 
-      // Fetch teams with members using server action
+      // Try to fetch teams from the API endpoint
       try {
-        console.log("Fetching teams with members data...")
-        const teamsData = await getAllTeamsWithMembers()
-        console.log("Teams data received:", teamsData)
+        console.log("Fetching teams from API endpoint")
+        const response = await fetch("/api/teams")
 
-        if (teamsData && teamsData.length > 0) {
-          setAllTeams(teamsData)
+        if (!response.ok) {
+          throw new Error(`API returned status ${response.status}`)
+        }
+
+        const data = await response.json()
+        console.log("Teams data received:", data)
+
+        if (data.teams && data.teams.length > 0) {
+          setAllTeams(data.teams)
         } else {
           console.log("No teams data received")
           setAllTeams([])
