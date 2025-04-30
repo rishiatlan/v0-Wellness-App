@@ -43,54 +43,65 @@ export async function getTeams() {
 
 export async function getUserTeam(userId: string) {
   try {
-    const cookieStore = cookies()
-    const supabase = createServerClient(cookieStore)
+    // Use service role client for more reliable access
+    const serviceClient = createServiceRoleClient()
+    console.log(`Fetching team for user ${userId} with service role client`)
 
-    // Get the user's team
-    const { data: userData, error: userError } = await supabase
+    // Get the user's team_id
+    const { data: userData, error: userError } = await serviceClient
       .from("users")
       .select("team_id")
       .eq("id", userId)
       .single()
 
-    if (userError || !userData?.team_id) {
+    if (userError) {
+      console.error("Error fetching user team_id:", userError)
+      return null
+    }
+
+    if (!userData?.team_id) {
+      console.log(`User ${userId} is not part of any team`)
       return null
     }
 
     // Get the team details
-    const { data: teamData, error: teamError } = await supabase
+    const { data: teamData, error: teamError } = await serviceClient
       .from("teams")
-      .select("id, name, total_points")
+      .select("id, name, total_points, banner_url")
       .eq("id", userData.team_id)
       .single()
 
     if (teamError) {
+      console.error("Error fetching team details:", teamError)
       return null
     }
 
     // Get team members
-    const { data: members, error: membersError } = await supabase
+    const { data: members, error: membersError } = await serviceClient
       .from("users")
-      .select("id, full_name, email, total_points")
+      .select("id, full_name, email, total_points, avatar_url")
       .eq("team_id", userData.team_id)
 
     if (membersError) {
-      return null
+      console.error("Error fetching team members:", membersError)
+      return { ...teamData, members: [], avgPoints: 0 }
     }
 
     // Calculate average points
     const avgPoints =
-      members.length > 0
-        ? Math.round(members.reduce((sum, member) => sum + member.total_points, 0) / members.length)
+      members && members.length > 0
+        ? Math.round(members.reduce((sum, member) => sum + (member.total_points || 0), 0) / members.length)
         : 0
+
+    console.log(`Successfully fetched team for user ${userId}: ${teamData.name} with ${members?.length || 0} members`)
 
     return {
       ...teamData,
-      members,
+      members: members || [],
       avgPoints,
     }
   } catch (error) {
-    console.error("Error fetching user team:", error)
+    console.error("Error in getUserTeam:", error)
     return null
   }
 }

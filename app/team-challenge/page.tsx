@@ -19,33 +19,39 @@ export default function TeamChallenge() {
   const [allTeams, setAllTeams] = useState<any[]>([])
   const [activeTab, setActiveTab] = useState("all-teams")
   const [error, setError] = useState<string | null>(null)
+  const [debugInfo, setDebugInfo] = useState<string | null>(null)
 
   const fetchTeamData = async () => {
     try {
       setLoading(true)
       setError(null)
+      setDebugInfo("Starting to fetch team data...")
 
       // Try to fetch teams from the API endpoint
       try {
-        console.log("Fetching teams from API endpoint")
+        setDebugInfo("Fetching teams from API endpoint...")
         const response = await fetch("/api/teams")
 
         if (!response.ok) {
-          throw new Error(`API returned status ${response.status}`)
+          const errorText = await response.text()
+          setDebugInfo(`API error: ${response.status} - ${errorText}`)
+          throw new Error(`API returned status ${response.status}: ${errorText}`)
         }
 
         const data = await response.json()
-        console.log("Teams data received:", data)
+        setDebugInfo(`Teams data received: ${data.teams ? data.teams.length : 0} teams`)
+        console.log("Teams data:", data)
 
         if (data.teams && data.teams.length > 0) {
           setAllTeams(data.teams)
         } else {
-          console.log("No teams data received")
+          setDebugInfo("No teams data received from API")
           setAllTeams([])
           setError("No teams found in the database. Please contact your administrator.")
         }
       } catch (teamsError: any) {
         console.error("Error fetching teams:", teamsError)
+        setDebugInfo(`Error fetching teams: ${teamsError.message}`)
         setError(`Failed to load teams: ${teamsError.message}`)
         setAllTeams([])
       }
@@ -53,20 +59,25 @@ export default function TeamChallenge() {
       // If user is logged in, fetch their team
       if (user?.id) {
         try {
+          setDebugInfo(`Fetching team for user ${user.id}...`)
           const userTeamData = await getUserTeam(user.id)
-          setUserTeam(userTeamData)
 
-          // If user has a team, set the active tab to "my-team"
           if (userTeamData) {
+            setDebugInfo(`User team found: ${userTeamData.name}`)
+            setUserTeam(userTeamData)
             setActiveTab("my-team")
+          } else {
+            setDebugInfo("No team found for user")
           }
         } catch (userTeamError: any) {
           console.error("Error fetching user team:", userTeamError)
+          setDebugInfo(`Error fetching user team: ${userTeamError.message}`)
           // Don't set main error for this, just log it
         }
       }
     } catch (error: any) {
       console.error("Error in fetchTeamData:", error)
+      setDebugInfo(`General error: ${error.message}`)
       setError(`Failed to load team data: ${error.message}`)
     } finally {
       setLoading(false)
@@ -124,9 +135,16 @@ export default function TeamChallenge() {
         </Alert>
       )}
 
+      {debugInfo && (
+        <Alert className="mb-6 bg-blue-900/20 border-blue-800">
+          <AlertTitle>Debug Info</AlertTitle>
+          <AlertDescription className="text-blue-300">{debugInfo}</AlertDescription>
+        </Alert>
+      )}
+
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="all-teams">All Teams</TabsTrigger>
+          <TabsTrigger value="all-teams">All Teams ({allTeams.length})</TabsTrigger>
           <TabsTrigger value="leaderboard">Leaderboard</TabsTrigger>
           <TabsTrigger value="my-team" disabled={!user || !userTeam}>
             My Team

@@ -3,48 +3,61 @@ import { createServiceRoleClient } from "@/lib/server-auth"
 
 export async function GET() {
   try {
-    // Use the service role client for direct database access
-    const supabase = createServiceRoleClient()
+    console.log("API: Fetching teams with service role client")
+    const serviceClient = createServiceRoleClient()
 
-    // Get all teams
-    const { data: teams, error: teamsError } = await supabase
+    // Get teams with total points - same approach as leaderboard
+    const { data: teams, error: teamsError } = await serviceClient
       .from("teams")
       .select("id, name, total_points, banner_url, creator_id")
+      .order("total_points", { ascending: false })
 
     if (teamsError) {
       console.error("API: Error fetching teams:", teamsError)
       return NextResponse.json({ error: teamsError.message }, { status: 500 })
     }
 
-    if (!teams || teams.length === 0) {
-      return NextResponse.json({ teams: [] }, { status: 200 })
-    }
+    console.log(`API: Found ${teams?.length || 0} teams, now fetching members for each`)
 
-    // For each team, get its members
+    // For each team, get the members - similar to getTeamLeaderboard
     const teamsWithMembers = await Promise.all(
-      teams.map(async (team) => {
+      (teams || []).map(async (team) => {
         try {
-          const { data: members, error: membersError } = await supabase
+          // Get member count
+          const { count, error: countError } = await serviceClient
+            .from("users")
+            .select("id", { count: "exact" })
+            .eq("team_id", team.id)
+
+          if (countError) {
+            console.error(`API: Error getting member count for team ${team.id}:`, countError)
+            return { ...team, members: [], memberCount: 0 }
+          }
+
+          // Get all team members
+          const { data: members, error: membersError } = await serviceClient
             .from("users")
             .select("id, full_name, email, total_points, avatar_url")
             .eq("team_id", team.id)
 
+          if (membersError) {
+            console.error(`API: Error getting members for team ${team.id}:`, membersError)
+            return { ...team, members: [], memberCount: count || 0 }
+          }
+
           return {
             ...team,
-            members: membersError ? [] : members || [],
-            memberCount: membersError ? 0 : members?.length || 0,
+            members: members || [],
+            memberCount: count || 0,
           }
         } catch (error) {
-          console.error(`API: Error fetching members for team ${team.id}:`, error)
-          return {
-            ...team,
-            members: [],
-            memberCount: 0,
-          }
+          console.error(`API: Error processing team ${team.id}:`, error)
+          return { ...team, members: [], memberCount: 0 }
         }
       }),
     )
 
+    console.log(`API: Successfully processed ${teamsWithMembers.length} teams with their members`)
     return NextResponse.json({ teams: teamsWithMembers }, { status: 200 })
   } catch (error: any) {
     console.error("API: Error in teams route:", error)
