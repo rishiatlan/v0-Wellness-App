@@ -5,21 +5,46 @@ export async function GET() {
   try {
     const supabase = createServiceRoleClient()
 
-    // Try to fetch teams
-    const { data, error } = await supabase.from("teams").select("*").limit(5)
+    // Get all teams
+    const { data: teams, error: teamsError } = await supabase.from("teams").select("*").order("name")
 
-    if (error) {
-      console.error("Error fetching teams:", error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+    if (teamsError) {
+      console.error("Error fetching teams:", teamsError)
+      return NextResponse.json({ error: "Failed to fetch teams" }, { status: 500 })
     }
 
+    // For each team, get the members
+    const teamsWithMembers = await Promise.all(
+      teams.map(async (team) => {
+        const { data: members, error: membersError } = await supabase
+          .from("users")
+          .select("id, full_name, email, total_points, avatar_url")
+          .eq("team_id", team.id)
+
+        if (membersError) {
+          console.error(`Error fetching members for team ${team.id}:`, membersError)
+          return {
+            ...team,
+            members: [],
+            memberCount: 0,
+            error: membersError.message,
+          }
+        }
+
+        return {
+          ...team,
+          members: members || [],
+          memberCount: members?.length || 0,
+        }
+      }),
+    )
+
     return NextResponse.json({
-      success: true,
-      count: data?.length || 0,
-      teams: data,
+      teams: teamsWithMembers,
+      count: teamsWithMembers.length,
     })
-  } catch (error: any) {
-    console.error("Error in debug-teams route:", error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  } catch (error) {
+    console.error("Error in debug-teams API:", error)
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }

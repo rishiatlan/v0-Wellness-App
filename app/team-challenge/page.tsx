@@ -7,8 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Loader2, Trophy, Award, Users, AlertCircle } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
-import { getUserTeam } from "@/app/actions/team-actions"
-import { getTeamsClient } from "@/lib/api-client"
+import { getUserTeam, getAllTeamsWithMembers } from "@/app/actions/team-actions"
 import { getAvatarUrl, getInitials } from "@/lib/avatar-utils"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 
@@ -26,20 +25,14 @@ export default function TeamChallenge() {
         setLoading(true)
         setError(null)
 
-        // Fetch teams using client-side function
+        // Fetch teams with members using server action
         try {
-          console.log("Fetching teams data...")
-          const teamsData = await getTeamsClient()
+          console.log("Fetching teams with members data...")
+          const teamsData = await getAllTeamsWithMembers()
           console.log("Teams data received:", teamsData)
 
           if (teamsData && teamsData.length > 0) {
-            // Process the teams data to add member counts
-            const processedTeams = teamsData.map((team) => ({
-              ...team,
-              // We'll fetch member counts separately if needed
-              memberCount: 0,
-            }))
-            setAllTeams(processedTeams)
+            setAllTeams(teamsData)
           } else {
             console.log("No teams data received")
             setAllTeams([])
