@@ -1,8 +1,10 @@
 "use server"
 
-import { createServerClient } from "@/lib/supabase/server"
+import { createServerActionClient } from "@supabase/auth-helpers-nextjs"
 import { cookies } from "next/headers"
+import type { Database } from "@/types/supabase"
 import { revalidatePath } from "next/cache"
+import { createServerClient } from "@/lib/supabase/server"
 import { createClient } from "@supabase/supabase-js"
 import { createServiceRoleClient } from "@/lib/server-auth"
 
@@ -17,77 +19,43 @@ const createServiceRoleClientOld = () => {
   })
 }
 
+// This function is the main one we need to fix
 export async function getTeams() {
-  const cookieStore = cookies()
-  const supabase = createServerClient(cookieStore)
+  const supabase = createServerActionClient<Database>({ cookies })
 
   try {
     const { data, error } = await supabase.from("teams").select("*").order("total_points", { ascending: false })
 
-    if (error) throw error
+    if (error) {
+      console.error("Error fetching teams:", error)
+      throw new Error("Failed to fetch teams")
+    }
 
     return data || []
-  } catch (error: any) {
-    console.error("Error fetching teams:", error)
-    throw new Error(`Error fetching teams: ${error.message}`)
+  } catch (error) {
+    console.error("Exception in getTeams:", error)
+    return []
   }
 }
 
 export async function getUserTeam(userId: string) {
+  const supabase = createServerActionClient<Database>({ cookies })
+
   try {
-    const cookieStore = cookies()
-    const supabase = createServerClient(cookieStore)
+    const { data, error } = await supabase.from("users").select("team_id, teams(*)").eq("id", userId).single()
 
-    // Get the user's team
-    const { data: userData, error: userError } = await supabase
-      .from("users")
-      .select("team_id")
-      .eq("id", userId)
-      .single()
-
-    if (userError || !userData?.team_id) {
+    if (error) {
+      console.error("Error fetching user team:", error)
       return null
     }
 
-    // Get the team details
-    const { data: teamData, error: teamError } = await supabase
-      .from("teams")
-      .select("id, name, total_points")
-      .eq("id", userData.team_id)
-      .single()
-
-    if (teamError) {
-      return null
-    }
-
-    // Get team members
-    const { data: members, error: membersError } = await supabase
-      .from("users")
-      .select("id, full_name, email, total_points")
-      .eq("team_id", userData.team_id)
-
-    if (membersError) {
-      return null
-    }
-
-    // Calculate average points
-    const avgPoints =
-      members.length > 0
-        ? Math.round(members.reduce((sum, member) => sum + member.total_points, 0) / members.length)
-        : 0
-
-    return {
-      ...teamData,
-      members,
-      avgPoints,
-    }
+    return data?.teams || null
   } catch (error) {
-    console.error("Error fetching user team:", error)
+    console.error("Exception in getUserTeam:", error)
     return null
   }
 }
 
-// Update the createTeam function to enforce a maximum of 5 members per team
 export async function createTeam(userId: string, teamName: string, bannerUrl?: string) {
   const cookieStore = cookies()
   const supabase = createServerClient(cookieStore)
@@ -165,54 +133,22 @@ export async function createTeam(userId: string, teamName: string, bannerUrl?: s
 
 // Update the joinTeam function to enforce a maximum of 5 members per team
 export async function joinTeam(userId: string, teamId: string) {
-  const cookieStore = cookies()
-  const supabase = createServerClient(cookieStore)
+  const supabase = createServerActionClient<Database>({ cookies })
 
   try {
-    // Check if user already has a team
-    const { data: userData, error: userError } = await supabase
-      .from("users")
-      .select("team_id")
-      .eq("id", userId)
-      .maybeSingle()
+    const { error } = await supabase.from("users").update({ team_id: teamId }).eq("id", userId)
 
-    if (userError) throw userError
-
-    if (userData?.team_id) {
-      return { success: false, error: "You are already a member of a team" }
+    if (error) {
+      console.error("Error joining team:", error)
+      throw new Error("Failed to join team")
     }
-
-    // Check if team exists
-    const { data: team, error: teamError } = await supabase.from("teams").select("id").eq("id", teamId).maybeSingle()
-
-    if (teamError) throw teamError
-
-    if (!team) {
-      return { success: false, error: "Team not found" }
-    }
-
-    // Check if team is full (5 members max)
-    const { count: memberCount, error: countError } = await supabase
-      .from("users")
-      .select("id", { count: "exact" })
-      .eq("team_id", teamId)
-
-    if (countError) throw countError
-
-    if (memberCount >= 5) {
-      return { success: false, error: "Team is already full (5 members maximum)" }
-    }
-
-    // Update user's team_id
-    const { error: updateError } = await supabase.from("users").update({ team_id: teamId }).eq("id", userId)
-
-    if (updateError) throw updateError
 
     revalidatePath("/team-challenge")
-    return { success: true, teamId }
-  } catch (error: any) {
-    console.error("Error joining team:", error)
-    return { success: false, error: error.message }
+    revalidatePath("/profile")
+    return { success: true }
+  } catch (error) {
+    console.error("Exception in joinTeam:", error)
+    return { success: false, error: "Failed to join team" }
   }
 }
 
@@ -513,120 +449,91 @@ export async function calculateTeamCumulativeScore(teamId: string) {
   }
 }
 
+// Updated function to check for Wellness Wednesday bonus
+// Now requires exactly 5 team members, each with 30+ points, and awards 25 bonus points
 export async function checkWellnessWednesdayBonus(teamId: string, date: string) {
-  const serviceClient = createServiceRoleClient()
+  const supabase = createServerActionClient<Database>({ cookies })
 
   try {
-    // Verify it's a Wednesday
+    // Check if the date is a Wednesday
     const checkDate = new Date(date)
     if (checkDate.getDay() !== 3) {
-      return { eligible: false, reason: "Not a Wednesday" }
+      // 0 is Sunday, 3 is Wednesday
+      return { success: false, message: "Wellness Wednesday bonus only applies on Wednesdays" }
     }
 
     // Get all team members
-    const { data: members, error: membersError } = await serviceClient.from("users").select("id").eq("team_id", teamId)
+    const { data: teamMembers, error: membersError } = await supabase.from("users").select("id").eq("team_id", teamId)
 
-    if (membersError) throw membersError
-
-    if (!members || members.length < 5) {
-      return { eligible: false, reason: "Team needs 5 members" }
+    if (membersError || !teamMembers) {
+      console.error("Error fetching team members:", membersError)
+      return { success: false, message: "Failed to check team members" }
     }
 
-    // Check if all members have at least 20 points for the day
-    const memberResults = []
-
-    for (const member of members) {
-      const { data: logs, error: logsError } = await serviceClient
-        .from("daily_logs")
-        .select("points")
-        .eq("user_id", member.id)
-        .eq("log_date", date)
-
-      if (logsError) throw logsError
-
-      const memberPoints = logs ? logs.reduce((sum, log) => sum + log.points, 0) : 0
-
-      memberResults.push({
-        userId: member.id,
-        points: memberPoints,
-        hasEnoughPoints: memberPoints >= 20,
-      })
-    }
-
-    const allMembersHaveEnoughPoints = memberResults.every((m) => m.hasEnoughPoints)
-
-    if (!allMembersHaveEnoughPoints) {
+    // Check if team has exactly 5 members
+    if (teamMembers.length !== 5) {
       return {
-        eligible: false,
-        reason: "Not all members have 20+ points",
-        membersMissing: true,
-        memberResults,
+        success: false,
+        message: `Team needs exactly 5 members for the bonus (currently has ${teamMembers.length})`,
       }
     }
 
-    // Check if bonus was already awarded for this date
-    const { data: existingBonus, error: existingError } = await serviceClient
-      .from("wellness_wednesday")
-      .select("*")
-      .eq("team_id", teamId)
-      .eq("date", date)
-      .maybeSingle()
+    // Check if all members earned at least 30 points on this day
+    const memberIds = teamMembers.map((member) => member.id)
 
-    if (existingError) throw existingError
+    // Get the total points for each member on this specific day
+    const { data: dailyPoints, error: pointsError } = await supabase
+      .from("daily_logs")
+      .select("user_id, points")
+      .in("user_id", memberIds)
+      .eq("log_date", date)
 
-    if (existingBonus) {
+    if (pointsError) {
+      console.error("Error fetching daily points:", pointsError)
+      return { success: false, message: "Failed to check daily points" }
+    }
+
+    // Calculate total points per user for this day
+    const userPointsMap = new Map()
+    dailyPoints?.forEach((log) => {
+      const currentPoints = userPointsMap.get(log.user_id) || 0
+      userPointsMap.set(log.user_id, currentPoints + log.points)
+    })
+
+    // Check if all 5 members earned at least 30 points
+    const allMembersQualified = memberIds.every((id) => {
+      const points = userPointsMap.get(id) || 0
+      return points >= 30
+    })
+
+    if (!allMembersQualified) {
       return {
-        eligible: true,
-        alreadyAwarded: true,
-        bonusPoints: existingBonus.bonus_points,
+        success: false,
+        message: "All team members must earn at least 30 points on Wednesday for the bonus",
       }
     }
 
-    // Award bonus points (10 per member)
-    const bonusPoints = members.length * 10
-
-    // Record the bonus
-    const { error: insertError } = await serviceClient.from("wellness_wednesday").insert({
-      team_id: teamId,
-      date: date,
-      bonus_achieved: true,
-      bonus_points: bonusPoints,
-    })
-
-    if (insertError) throw insertError
-
-    // Add achievement
-    const { error: achievementError } = await serviceClient.from("team_achievements").insert({
-      team_id: teamId,
-      achievement_type: "WEDNESDAY_BONUS",
-      achievement_description: "Wellness Wednesday Bonus",
-      points_awarded: bonusPoints,
-    })
-
-    if (achievementError) throw achievementError
-
-    // Update team points
-    const { data: team, error: teamError } = await serviceClient
+    // Apply the 25-point bonus to the team
+    const { error: updateError } = await supabase
       .from("teams")
-      .select("total_points")
-      .eq("id", teamId)
-      .single()
-
-    if (teamError) throw teamError
-
-    const { error: updateError } = await serviceClient
-      .from("teams")
-      .update({ total_points: (team?.total_points || 0) + bonusPoints })
+      .update({ total_points: supabase.rpc("increment", { x: 25 }) })
       .eq("id", teamId)
 
-    if (updateError) throw updateError
+    if (updateError) {
+      console.error("Error applying team bonus:", updateError)
+      return { success: false, message: "Failed to apply team bonus" }
+    }
 
     revalidatePath("/team-challenge")
+    revalidatePath("/leaderboard")
 
-    return { eligible: true, bonusPoints, memberResults }
-  } catch (error: any) {
-    console.error("Error checking Wellness Wednesday bonus:", error)
-    return { eligible: false, error: error.message }
+    return {
+      success: true,
+      message: "Wellness Wednesday bonus of 25 points applied to the team!",
+    }
+  } catch (error) {
+    console.error("Exception in checkWellnessWednesdayBonus:", error)
+    return { success: false, message: "An error occurred while checking for the bonus" }
   }
 }
 

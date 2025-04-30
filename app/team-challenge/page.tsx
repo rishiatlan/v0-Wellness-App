@@ -5,17 +5,18 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Loader2, Trophy, Award, Users } from "lucide-react"
+import { Loader2, Trophy, Award, Users, AlertCircle } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
-import { getUserTeam, getTeams } from "@/app/actions/team-actions"
+import { getUserTeam } from "@/app/actions/team-actions"
+import { getTeamsClient } from "@/lib/api-client"
 import { getAvatarUrl, getInitials } from "@/lib/avatar-utils"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 
 export default function TeamChallenge() {
   const { user, loading: authLoading } = useAuth()
   const [loading, setLoading] = useState(true)
   const [userTeam, setUserTeam] = useState<any>(null)
   const [allTeams, setAllTeams] = useState<any[]>([])
-  const [topTeams, setTopTeams] = useState<any[]>([])
   const [activeTab, setActiveTab] = useState("all-teams")
   const [error, setError] = useState<string | null>(null)
 
@@ -25,14 +26,29 @@ export default function TeamChallenge() {
         setLoading(true)
         setError(null)
 
-        // Fetch all teams directly
-        const teamsData = await getTeams()
-        console.log("Teams data:", teamsData)
-        setAllTeams(teamsData || [])
+        // Fetch teams using client-side function
+        try {
+          console.log("Fetching teams data...")
+          const teamsData = await getTeamsClient()
+          console.log("Teams data received:", teamsData)
 
-        // Sort teams by points for top teams
-        const sortedTeams = [...teamsData].sort((a, b) => b.total_points - a.total_points).slice(0, 5)
-        setTopTeams(sortedTeams || [])
+          if (teamsData && teamsData.length > 0) {
+            // Process the teams data to add member counts
+            const processedTeams = teamsData.map((team) => ({
+              ...team,
+              // We'll fetch member counts separately if needed
+              memberCount: 0,
+            }))
+            setAllTeams(processedTeams)
+          } else {
+            console.log("No teams data received")
+            setAllTeams([])
+          }
+        } catch (teamsError: any) {
+          console.error("Error fetching teams:", teamsError)
+          setError(`Failed to load teams: ${teamsError.message}`)
+          setAllTeams([])
+        }
 
         // If user is logged in, fetch their team
         if (user?.id) {
@@ -44,14 +60,14 @@ export default function TeamChallenge() {
             if (userTeamData) {
               setActiveTab("my-team")
             }
-          } catch (userTeamError) {
+          } catch (userTeamError: any) {
             console.error("Error fetching user team:", userTeamError)
-            // Don't set error here, just log it
+            // Don't set main error for this, just log it
           }
         }
-      } catch (error) {
-        console.error("Error fetching team data:", error)
-        setError("Failed to load team data. Please try again later.")
+      } catch (error: any) {
+        console.error("Error in fetchTeamData:", error)
+        setError(`Failed to load team data: ${error.message}`)
       } finally {
         setLoading(false)
       }
@@ -87,6 +103,14 @@ export default function TeamChallenge() {
         <p className="text-muted-foreground">Teams competing in the Spring Wellness Challenge</p>
       </div>
 
+      {error && (
+        <Alert variant="destructive" className="mb-6">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Error</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="all-teams">All Teams</TabsTrigger>
@@ -110,7 +134,6 @@ export default function TeamChallenge() {
               </CardHeader>
               <CardContent>
                 <p className="text-slate-300">There are currently no teams in the challenge.</p>
-                {error && <p className="text-red-400 mt-2">Error: {error}</p>}
               </CardContent>
             </Card>
           )}
