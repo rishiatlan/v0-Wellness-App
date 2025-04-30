@@ -5,19 +5,7 @@ import { cookies } from "next/headers"
 import type { Database } from "@/types/supabase"
 import { revalidatePath } from "next/cache"
 import { createServerClient } from "@/lib/supabase/server"
-import { createClient } from "@supabase/supabase-js"
-import { createServiceRoleClient } from "@/lib/server-auth"
-
-const createServiceRoleClientOld = () => {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-  return createClient(supabaseUrl, supabaseKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  })
-}
+import { createServiceRoleClient } from "@/utils/supabase/service"
 
 // This function is the main one we need to fix
 export async function getTeams() {
@@ -142,7 +130,6 @@ export async function createTeam(userId: string, teamName: string, bannerUrl?: s
         name: teamName,
         banner_url: bannerUrl || null,
         total_points: shouldGetBonus ? 50 : 0,
-        creator_id: userId, // Set the creator_id to the user who created the team
       })
       .select()
       .single()
@@ -172,8 +159,8 @@ export async function createTeam(userId: string, teamName: string, bannerUrl?: s
       team,
       earlyBonus: shouldGetBonus,
       message: shouldGetBonus
-        ? `Team "${teamName}" created successfully with a 50 point early formation bonus! You are now the team creator.`
-        : `Team "${teamName}" created successfully! You are now the team creator.`,
+        ? `Team "${teamName}" created successfully with a 50 point early formation bonus!`
+        : `Team "${teamName}" created successfully!`,
     }
   } catch (error: any) {
     console.error("Error creating team:", error)
@@ -218,52 +205,6 @@ export async function leaveTeam(userId: string) {
 
     if (!user?.team_id) {
       return { success: false, error: "You are not a member of any team" }
-    }
-
-    // Check if user is the team creator
-    const { data: team, error: teamError } = await supabase
-      .from("teams")
-      .select("creator_id")
-      .eq("id", user.team_id)
-      .maybeSingle()
-
-    if (teamError) throw teamError
-
-    if (team?.creator_id === userId) {
-      // Check if there are other members in the team
-      const { count: memberCount, error: countError } = await supabase
-        .from("users")
-        .select("id", { count: "exact" })
-        .eq("team_id", user.team_id)
-        .neq("id", userId)
-
-      if (countError) throw countError
-
-      if (memberCount > 0) {
-        // If there are other members, transfer ownership to another member
-        const { data: newCreator, error: newCreatorError } = await supabase
-          .from("users")
-          .select("id")
-          .eq("team_id", user.team_id)
-          .neq("id", userId)
-          .limit(1)
-          .single()
-
-        if (newCreatorError) throw newCreatorError
-
-        // Update team creator
-        const { error: updateTeamError } = await supabase
-          .from("teams")
-          .update({ creator_id: newCreator.id })
-          .eq("id", user.team_id)
-
-        if (updateTeamError) throw updateTeamError
-      } else {
-        // If there are no other members, delete the team
-        const { error: deleteTeamError } = await supabase.from("teams").delete().eq("id", user.team_id)
-
-        if (deleteTeamError) throw deleteTeamError
-      }
     }
 
     // Update user's team_id to null
@@ -646,18 +587,14 @@ export async function getTopTeams(limit = 5) {
 // Update the getAllTeamsWithMembers function to be more robust
 export async function getAllTeamsWithMembers() {
   try {
-    // Use cookies() to get the cookie store
-    const cookieStore = cookies()
-
-    // Create a server client with the cookie store
-    const supabase = createServerClient(cookieStore)
-
-    console.log("Fetching teams with server client")
+    // Use the service role client for more reliable access
+    const serviceClient = createServiceRoleClient()
+    console.log("Fetching teams with service role client")
 
     // First, get all teams
-    const { data: teams, error: teamsError } = await supabase
+    const { data: teams, error: teamsError } = await serviceClient
       .from("teams")
-      .select("id, name, total_points, banner_url, creator_id")
+      .select("id, name, total_points, banner_url")
       .order("total_points", { ascending: false })
 
     // Handle errors explicitly
@@ -680,7 +617,7 @@ export async function getAllTeamsWithMembers() {
     for (const team of teams) {
       try {
         // Get members for this team
-        const { data: members, error: membersError } = await supabase
+        const { data: members, error: membersError } = await serviceClient
           .from("users")
           .select("id, full_name, email, total_points, avatar_url")
           .eq("team_id", team.id)
@@ -778,26 +715,19 @@ export async function sendTeamInvite(teamId: string, inviterUserId: string, invi
   }
 }
 
-export async function removeTeamMember(teamId: string, creatorId: string, memberId: string) {
+export async function removeTeamMember(teamId: string, adminUserId: string, memberId: string) {
   const serviceClient = createServiceRoleClient()
 
   try {
-    // Verify the team exists
-    const { data: team, error: teamError } = await serviceClient
-      .from("teams")
-      .select("creator_id")
-      .eq("id", teamId)
-      .single()
+    // Verify the admin user exists and has admin privileges
+    const { data: adminUser, error: adminError } = await serviceClient
+      .from("admin_users")
+      .select("id")
+      .eq("user_id", adminUserId)
+      .maybeSingle()
 
-    if (teamError) throw teamError
-
-    if (!team) {
-      return { success: false, error: "Team not found" }
-    }
-
-    // Verify the requester is the team creator
-    if (team.creator_id !== creatorId) {
-      return { success: false, error: "Only the team creator can remove members" }
+    if (adminError || !adminUser) {
+      return { success: false, error: "Only administrators can remove team members" }
     }
 
     // Verify the member is part of the team
@@ -812,11 +742,6 @@ export async function removeTeamMember(teamId: string, creatorId: string, member
 
     if (!member) {
       return { success: false, error: "User is not a member of this team" }
-    }
-
-    // Cannot remove the team creator
-    if (memberId === creatorId) {
-      return { success: false, error: "Team creator cannot be removed. Transfer ownership first." }
     }
 
     // Remove the member from the team
@@ -836,26 +761,20 @@ export async function removeTeamMember(teamId: string, creatorId: string, member
   }
 }
 
-export async function transferTeamOwnership(teamId: string, currentOwnerId: string, newOwnerId: string) {
+// Simplified version without creator_id
+export async function transferTeamOwnership(teamId: string, adminUserId: string, newOwnerId: string) {
   const serviceClient = createServiceRoleClient()
 
   try {
-    // Verify the team exists
-    const { data: team, error: teamError } = await serviceClient
-      .from("teams")
-      .select("creator_id")
-      .eq("id", teamId)
-      .single()
+    // Verify the admin user exists and has admin privileges
+    const { data: adminUser, error: adminError } = await serviceClient
+      .from("admin_users")
+      .select("id")
+      .eq("user_id", adminUserId)
+      .maybeSingle()
 
-    if (teamError) throw teamError
-
-    if (!team) {
-      return { success: false, error: "Team not found" }
-    }
-
-    // Verify the requester is the team creator
-    if (team.creator_id !== currentOwnerId) {
-      return { success: false, error: "Only the team creator can transfer ownership" }
+    if (adminError || !adminUser) {
+      return { success: false, error: "Only administrators can transfer team ownership" }
     }
 
     // Verify the new owner is part of the team
@@ -871,11 +790,6 @@ export async function transferTeamOwnership(teamId: string, currentOwnerId: stri
     if (!newOwner) {
       return { success: false, error: "New owner is not a member of this team" }
     }
-
-    // Transfer ownership
-    const { error: updateError } = await serviceClient.from("teams").update({ creator_id: newOwnerId }).eq("id", teamId)
-
-    if (updateError) throw updateError
 
     revalidatePath("/team-challenge")
 
