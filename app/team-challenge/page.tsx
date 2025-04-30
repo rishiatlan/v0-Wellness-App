@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Loader2, Trophy, Award, Users } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
-import { getUserTeam, getTopTeams, getAllTeamsWithMembers } from "@/app/actions/team-actions"
+import { getUserTeam, getTeams } from "@/app/actions/team-actions"
 import { getAvatarUrl, getInitials } from "@/lib/avatar-utils"
 
 export default function TeamChallenge() {
@@ -25,13 +25,14 @@ export default function TeamChallenge() {
         setLoading(true)
         setError(null)
 
-        // Fetch all teams with members
-        const teamsData = await getAllTeamsWithMembers()
+        // Fetch all teams directly
+        const teamsData = await getTeams()
+        console.log("Teams data:", teamsData)
         setAllTeams(teamsData || [])
 
-        // Fetch top teams
-        const topTeamsData = await getTopTeams(5)
-        setTopTeams(topTeamsData || [])
+        // Sort teams by points for top teams
+        const sortedTeams = [...teamsData].sort((a, b) => b.total_points - a.total_points).slice(0, 5)
+        setTopTeams(sortedTeams || [])
 
         // If user is logged in, fetch their team
         if (user?.id) {
@@ -109,6 +110,7 @@ export default function TeamChallenge() {
               </CardHeader>
               <CardContent>
                 <p className="text-slate-300">There are currently no teams in the challenge.</p>
+                {error && <p className="text-red-400 mt-2">Error: {error}</p>}
               </CardContent>
             </Card>
           )}

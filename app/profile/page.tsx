@@ -1,46 +1,44 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { useAuth } from "@/lib/auth-context"
-import { getUserProfile } from "@/lib/auth"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
-import { Loader2 } from "lucide-react"
-import Link from "next/link"
-import { Shield } from "lucide-react"
+import { Loader2, Trophy, Award, Calendar } from "lucide-react"
+import { useAuth } from "@/lib/auth-context"
+import { getUserProfileClient } from "@/lib/api-client"
 import { getAvatarUrl, getInitials } from "@/lib/avatar-utils"
 
-const isAdmin = (email: string | null | undefined) => {
-  if (!email) return false
-  const adminEmails = ["admin@example.com", "test@example.com"] // Replace with your actual admin emails
-  return adminEmails.includes(email)
-}
-
 export default function ProfilePage() {
-  const { user } = useAuth()
+  const { user, loading: authLoading } = useAuth()
   const [profile, setProfile] = useState<any>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     const fetchProfile = async () => {
-      if (user) {
-        try {
-          const userProfile = await getUserProfile(user.id)
-          setProfile(userProfile)
-        } catch (error) {
-          console.error("Error fetching profile:", error)
-        } finally {
-          setLoading(false)
-        }
+      if (!user?.id) return
+
+      try {
+        setLoading(true)
+        const profileData = await getUserProfileClient(user.id)
+        setProfile(profileData)
+      } catch (err: any) {
+        console.error("Error fetching profile:", err)
+        setError(err.message || "Failed to load profile")
+      } finally {
+        setLoading(false)
       }
     }
 
-    fetchProfile()
-  }, [user])
+    if (user?.id) {
+      fetchProfile()
+    } else if (!authLoading) {
+      setLoading(false)
+    }
+  }, [user, authLoading])
 
-  if (loading) {
+  if (authLoading || loading) {
     return (
       <div className="container flex h-[calc(100vh-200px)] items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -51,15 +49,27 @@ export default function ProfilePage() {
   if (!user) {
     return (
       <div className="container py-8">
-        <Card>
+        <Card className="bg-navy-950 border-navy-800">
           <CardHeader>
-            <CardTitle>Profile</CardTitle>
-            <CardDescription>You need to be logged in to view your profile</CardDescription>
+            <CardTitle className="text-white">Not Logged In</CardTitle>
           </CardHeader>
           <CardContent>
-            <Button asChild>
-              <Link href="/auth/login">Sign In</Link>
-            </Button>
+            <p className="text-slate-300">Please log in to view your profile.</p>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="container py-8">
+        <Card className="bg-navy-950 border-navy-800">
+          <CardHeader>
+            <CardTitle className="text-white">Error</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-red-400">{error}</p>
           </CardContent>
         </Card>
       </div>
@@ -68,124 +78,102 @@ export default function ProfilePage() {
 
   return (
     <div className="container py-8">
-      <div className="mb-8 space-y-2">
-        <h1 className="text-3xl font-bold tracking-tighter sm:text-4xl">Your Profile</h1>
-        <p className="text-muted-foreground">Manage your account and view your progress</p>
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold tracking-tight">My Profile</h1>
+        <p className="text-muted-foreground">View and manage your wellness profile</p>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Account Information</CardTitle>
-            <CardDescription>Your personal information and account details</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
+        <Card className="bg-navy-950 border-navy-800">
+          <CardHeader className="border-b border-navy-800">
             <div className="flex items-center gap-4">
-              <Avatar className="h-16 w-16">
-                <img
-                  src={user.id ? getAvatarUrl(user.id) : undefined}
-                  alt={`${user.user_metadata?.full_name || user.email?.split("@")[0]}'s avatar`}
-                  onError={(e) => {
-                    // If image fails to load, fallback will be shown
-                    e.currentTarget.style.display = "none"
-                  }}
+              <Avatar className="h-16 w-16 border-2 border-navy-700">
+                <AvatarImage
+                  src={profile?.avatar_url || getAvatarUrl(user.id || user.email, "user")}
+                  alt={profile?.full_name || user.email}
                 />
-                <AvatarFallback className="text-xl bg-primary text-primary-foreground">
-                  {getInitials(user.user_metadata?.full_name || user.email)}
+                <AvatarFallback className="bg-navy-700 text-white">
+                  {getInitials(profile?.full_name || user.email)}
                 </AvatarFallback>
               </Avatar>
               <div>
-                <h3 className="text-xl font-medium">{user.user_metadata?.full_name || user.email?.split("@")[0]}</h3>
-                <p className="text-sm text-muted-foreground">{user.email}</p>
-                {profile?.team_id && (
-                  <Badge className="mt-1 bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300">
-                    Team Member
-                  </Badge>
-                )}
+                <CardTitle className="text-white">{profile?.full_name || user.email?.split("@")[0]}</CardTitle>
+                <CardDescription className="text-slate-400">{user.email}</CardDescription>
               </div>
             </div>
-
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Email Verified</span>
-                <span>{user.email_confirmed_at ? "Yes" : "No"}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Account Created</span>
-                <span>{profile?.created_at ? new Date(profile.created_at).toLocaleDateString() : "N/A"}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Last Sign In</span>
-                <span>{user.last_sign_in_at ? new Date(user.last_sign_in_at).toLocaleDateString() : "N/A"}</span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Wellness Summary</CardTitle>
-            <CardDescription>Your challenge progress and achievements</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-6">
+          <CardContent className="pt-6">
             <div className="grid grid-cols-2 gap-4">
-              <div className="rounded-lg bg-blue-50 p-4 text-center dark:bg-blue-900/20">
-                <div className="text-2xl font-bold text-blue-700 dark:text-blue-300">{profile?.total_points || 0}</div>
-                <div className="text-sm text-blue-700 dark:text-blue-300">Total Points</div>
+              <div className="rounded-lg bg-blue-900/20 p-4 text-center border border-blue-800">
+                <div className="text-2xl font-bold text-blue-400">{profile?.total_points || 0}</div>
+                <div className="text-sm text-blue-300">Total Points</div>
               </div>
-              <div className="rounded-lg bg-teal-50 p-4 text-center dark:bg-teal-900/20">
-                <div className="text-2xl font-bold text-teal-700 dark:text-teal-300">
-                  {profile?.current_tier === 0
-                    ? "Getting Started"
-                    : profile?.current_tier === 1
-                      ? "Seedling"
-                      : profile?.current_tier === 2
-                        ? "Bloomer"
-                        : "Champion"}
-                </div>
-                <div className="text-sm text-teal-700 dark:text-teal-300">Current Tier</div>
+              <div className="rounded-lg bg-teal-900/20 p-4 text-center border border-teal-800">
+                <div className="text-2xl font-bold text-teal-400">{profile?.current_tier || 0}</div>
+                <div className="text-sm text-teal-300">Current Tier</div>
               </div>
-            </div>
-
-            <div className="space-y-2">
-              <h4 className="font-medium">Quick Links</h4>
-              <div className="grid grid-cols-2 gap-2">
-                <Button variant="outline" asChild size="sm">
-                  <Link href="/daily-tracker">Daily Tracker</Link>
-                </Button>
-                <Button variant="outline" asChild size="sm">
-                  <Link href="/my-progress">My Progress</Link>
-                </Button>
-                <Button variant="outline" asChild size="sm">
-                  <Link href="/team-challenge">Team Challenge</Link>
-                </Button>
-                <Button variant="outline" asChild size="sm">
-                  <Link href="/leaderboard">Leaderboard</Link>
-                </Button>
+              <div className="rounded-lg bg-emerald-900/20 p-4 text-center border border-emerald-800">
+                <div className="text-2xl font-bold text-emerald-400">{profile?.current_streak || 0}</div>
+                <div className="text-sm text-emerald-300">Day Streak</div>
+              </div>
+              <div className="rounded-lg bg-purple-900/20 p-4 text-center border border-purple-800">
+                <div className="text-2xl font-bold text-purple-400">{profile?.team_id ? "Yes" : "No"}</div>
+                <div className="text-sm text-purple-300">Team Member</div>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        {user && isAdmin(user.email) && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Shield className="h-5 w-5 text-purple-500" />
-                <span>Admin Access</span>
-              </CardTitle>
-              <CardDescription>Manage users, teams and system settings</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <p className="text-sm">
-                You have administrator privileges. Use the admin dashboard to manage the wellness challenge.
-              </p>
-              <Button asChild className="w-full">
-                <Link href="/admin">Access Admin Dashboard</Link>
-              </Button>
-            </CardContent>
-          </Card>
-        )}
+        <Card className="bg-navy-950 border-navy-800">
+          <CardHeader className="border-b border-navy-800">
+            <CardTitle className="flex items-center gap-2 text-white">
+              <Trophy className="h-5 w-5 text-amber-500" />
+              <span>Achievements</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-6">
+            <div className="space-y-4">
+              <div className="rounded-lg border border-navy-800 p-4">
+                <div className="flex items-center gap-3">
+                  <div className="rounded-full bg-amber-500/20 p-2">
+                    <Trophy className="h-5 w-5 text-amber-500" />
+                  </div>
+                  <div>
+                    <div className="font-medium text-white">First Activity</div>
+                    <div className="text-xs text-slate-400">Completed your first wellness activity</div>
+                  </div>
+                  <Badge className="ml-auto bg-blue-900/20 text-blue-400 border-blue-700">+10 pts</Badge>
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-navy-800 p-4">
+                <div className="flex items-center gap-3">
+                  <div className="rounded-full bg-emerald-500/20 p-2">
+                    <Calendar className="h-5 w-5 text-emerald-500" />
+                  </div>
+                  <div>
+                    <div className="font-medium text-white">3-Day Streak</div>
+                    <div className="text-xs text-slate-400">Completed activities for 3 days in a row</div>
+                  </div>
+                  <Badge className="ml-auto bg-blue-900/20 text-blue-400 border-blue-700">+15 pts</Badge>
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-navy-800 p-4">
+                <div className="flex items-center gap-3">
+                  <div className="rounded-full bg-purple-500/20 p-2">
+                    <Award className="h-5 w-5 text-purple-500" />
+                  </div>
+                  <div>
+                    <div className="font-medium text-white">Tier 1 Reached</div>
+                    <div className="text-xs text-slate-400">Reached Tier 1 in the wellness program</div>
+                  </div>
+                  <Badge className="ml-auto bg-blue-900/20 text-blue-400 border-blue-700">+25 pts</Badge>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   )
