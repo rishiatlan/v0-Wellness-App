@@ -111,16 +111,29 @@ export async function getTeamsClient() {
   const supabase = getClient()
 
   try {
-    const { data, error } = await supabase.from("teams").select("*").order("name")
+    console.log("Fetching teams from client-side")
+
+    // First try to fetch teams directly
+    const { data, error } = await supabase.from("teams").select("*").order("total_points", { ascending: false })
 
     if (error) {
-      console.error("Teams fetch error:", error)
-      throw new Error("Unable to complete the requested action")
+      console.error("Teams fetch error from client:", error)
+
+      // If direct fetch fails, try the debug API endpoint as fallback
+      console.log("Trying fallback API endpoint")
+      const response = await fetch("/api/debug-teams")
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch teams from API")
+      }
+
+      const apiData = await response.json()
+      return apiData.teams || []
     }
 
     return data || []
   } catch (error: any) {
-    console.error("Exception in getTeams:", error)
-    throw new Error("Unable to complete the requested action")
+    console.error("Exception in getTeamsClient:", error)
+    throw new Error(`Unable to fetch teams: ${error.message}`)
   }
 }

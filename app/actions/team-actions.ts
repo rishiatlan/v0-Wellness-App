@@ -593,42 +593,61 @@ export async function getTopTeams(limit = 5) {
   }
 }
 
-// Add a new function to get all teams with their members
+// Update the getAllTeamsWithMembers function to use the service role client
 export async function getAllTeamsWithMembers() {
   try {
-    const cookieStore = cookies()
-    const supabase = createServerClient(cookieStore)
+    // Use the service role client for more reliable access
+    const serviceClient = createServiceRoleClient()
+    console.log("Fetching all teams with members using service role client")
 
     // Get all teams
-    const { data: teams, error: teamsError } = await supabase
+    const { data: teams, error: teamsError } = await serviceClient
       .from("teams")
-      .select("id, name, total_points")
-      .order("name")
+      .select("id, name, total_points, banner_url, creator_id")
+      .order("total_points", { ascending: false })
 
-    if (teamsError || !teams) {
+    if (teamsError) {
+      console.error("Error fetching teams:", teamsError)
+      throw new Error(`Failed to fetch teams: ${teamsError.message}`)
+    }
+
+    if (!teams || teams.length === 0) {
+      console.log("No teams found in database")
       return []
     }
+
+    console.log(`Found ${teams.length} teams, fetching members for each team`)
 
     // For each team, get the members
     const teamsWithMembers = await Promise.all(
       teams.map(async (team) => {
-        const { data: members, error: membersError } = await supabase
+        const { data: members, error: membersError } = await serviceClient
           .from("users")
-          .select("id, full_name, email, total_points")
+          .select("id, full_name, email, total_points, avatar_url")
           .eq("team_id", team.id)
+
+        if (membersError) {
+          console.error(`Error fetching members for team ${team.id}:`, membersError)
+          return {
+            ...team,
+            members: [],
+            memberCount: 0,
+          }
+        }
 
         return {
           ...team,
-          members: membersError ? [] : members,
-          memberCount: membersError ? 0 : members.length,
+          members: members || [],
+          memberCount: members?.length || 0,
         }
       }),
     )
 
+    console.log(`Successfully processed ${teamsWithMembers.length} teams with their members`)
     return teamsWithMembers
-  } catch (error) {
-    console.error("Error fetching all teams with members:", error)
-    return []
+  } catch (error: any) {
+    console.error("Error in getAllTeamsWithMembers:", error)
+    throw new Error(`Error fetching teams with members: ${error.message}`)
   }
 }
 

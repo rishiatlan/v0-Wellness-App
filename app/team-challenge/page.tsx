@@ -5,11 +5,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Loader2, Trophy, Award, Users, AlertCircle } from "lucide-react"
+import { Loader2, Trophy, Award, Users, AlertCircle, RefreshCcw } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { getUserTeam, getAllTeamsWithMembers } from "@/app/actions/team-actions"
 import { getAvatarUrl, getInitials } from "@/lib/avatar-utils"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Button } from "@/components/ui/button"
 
 export default function TeamChallenge() {
   const { user, loading: authLoading } = useAuth()
@@ -19,53 +20,54 @@ export default function TeamChallenge() {
   const [activeTab, setActiveTab] = useState("all-teams")
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    const fetchTeamData = async () => {
+  const fetchTeamData = async () => {
+    try {
+      setLoading(true)
+      setError(null)
+
+      // Fetch teams with members using server action
       try {
-        setLoading(true)
-        setError(null)
+        console.log("Fetching teams with members data...")
+        const teamsData = await getAllTeamsWithMembers()
+        console.log("Teams data received:", teamsData)
 
-        // Fetch teams with members using server action
-        try {
-          console.log("Fetching teams with members data...")
-          const teamsData = await getAllTeamsWithMembers()
-          console.log("Teams data received:", teamsData)
-
-          if (teamsData && teamsData.length > 0) {
-            setAllTeams(teamsData)
-          } else {
-            console.log("No teams data received")
-            setAllTeams([])
-          }
-        } catch (teamsError: any) {
-          console.error("Error fetching teams:", teamsError)
-          setError(`Failed to load teams: ${teamsError.message}`)
+        if (teamsData && teamsData.length > 0) {
+          setAllTeams(teamsData)
+        } else {
+          console.log("No teams data received")
           setAllTeams([])
+          setError("No teams found in the database. Please contact your administrator.")
         }
-
-        // If user is logged in, fetch their team
-        if (user?.id) {
-          try {
-            const userTeamData = await getUserTeam(user.id)
-            setUserTeam(userTeamData)
-
-            // If user has a team, set the active tab to "my-team"
-            if (userTeamData) {
-              setActiveTab("my-team")
-            }
-          } catch (userTeamError: any) {
-            console.error("Error fetching user team:", userTeamError)
-            // Don't set main error for this, just log it
-          }
-        }
-      } catch (error: any) {
-        console.error("Error in fetchTeamData:", error)
-        setError(`Failed to load team data: ${error.message}`)
-      } finally {
-        setLoading(false)
+      } catch (teamsError: any) {
+        console.error("Error fetching teams:", teamsError)
+        setError(`Failed to load teams: ${teamsError.message}`)
+        setAllTeams([])
       }
-    }
 
+      // If user is logged in, fetch their team
+      if (user?.id) {
+        try {
+          const userTeamData = await getUserTeam(user.id)
+          setUserTeam(userTeamData)
+
+          // If user has a team, set the active tab to "my-team"
+          if (userTeamData) {
+            setActiveTab("my-team")
+          }
+        } catch (userTeamError: any) {
+          console.error("Error fetching user team:", userTeamError)
+          // Don't set main error for this, just log it
+        }
+      }
+    } catch (error: any) {
+      console.error("Error in fetchTeamData:", error)
+      setError(`Failed to load team data: ${error.message}`)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
     // Only fetch data if auth is not loading
     if (!authLoading) {
       fetchTeamData()
@@ -91,9 +93,21 @@ export default function TeamChallenge() {
 
   return (
     <div className="container py-8">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold tracking-tight">Team Challenge</h1>
-        <p className="text-muted-foreground">Teams competing in the Spring Wellness Challenge</p>
+      <div className="mb-8 flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Team Challenge</h1>
+          <p className="text-muted-foreground">Teams competing in the Spring Wellness Challenge</p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={fetchTeamData}
+          disabled={loading}
+          className="flex items-center gap-2"
+        >
+          <RefreshCcw className="h-4 w-4" />
+          Refresh
+        </Button>
       </div>
 
       {error && (
