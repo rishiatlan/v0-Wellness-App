@@ -14,15 +14,22 @@ export default async function Login({
   searchParams: { message: string; callbackUrl: string }
 }) {
   const cookieStore = cookies()
-  const supabase = createClient(cookieStore)
+  // Since createClient is now async, we need to await it
+  const supabase = await createClient(cookieStore)
 
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
+  // Wrap this in a try/catch to handle potential errors
+  try {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
 
-  // If the user is already logged in, redirect them
-  if (session) {
-    return redirect(searchParams.callbackUrl || "/")
+    // If the user is already logged in, redirect them
+    if (session) {
+      return redirect(searchParams.callbackUrl || "/")
+    }
+  } catch (error) {
+    console.error("Error getting session:", error)
+    // Continue to login page if there's an error getting the session
   }
 
   const signIn = async (formData: FormData) => {
@@ -31,20 +38,29 @@ export default async function Login({
     const email = formData.get("email") as string
     const password = formData.get("password") as string
     const cookieStore = cookies()
-    const supabase = createClient(cookieStore)
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
+    try {
+      // Since createClient is now async, we need to await it
+      const supabase = await createClient(cookieStore)
 
-    if (error) {
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
+
+      if (error) {
+        return redirect(
+          `/auth/login?message=${encodeURIComponent(error.message)}${searchParams.callbackUrl ? `&callbackUrl=${encodeURIComponent(searchParams.callbackUrl)}` : ""}`,
+        )
+      }
+
+      return redirect(searchParams.callbackUrl || "/")
+    } catch (error) {
+      console.error("Error signing in:", error)
       return redirect(
-        `/auth/login?message=${encodeURIComponent(error.message)}${searchParams.callbackUrl ? `&callbackUrl=${encodeURIComponent(searchParams.callbackUrl)}` : ""}`,
+        `/auth/login?message=${encodeURIComponent("An unexpected error occurred. Please try again.")}${searchParams.callbackUrl ? `&callbackUrl=${encodeURIComponent(searchParams.callbackUrl)}` : ""}`,
       )
     }
-
-    return redirect(searchParams.callbackUrl || "/")
   }
 
   return (

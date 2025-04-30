@@ -1,196 +1,171 @@
-"use client"
-
-import type React from "react"
-
-import { useState } from "react"
-import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { signUp, isAtlanEmail } from "@/lib/auth"
+import { redirect } from "next/navigation"
+import { cookies } from "next/headers"
+import { createClient } from "@/lib/supabase/server"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { AlertCircle, Mail, User } from "lucide-react"
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import Image from "next/image"
+import { isAtlanEmail } from "@/lib/is-atlan-email"
 
-export default function RegisterPage() {
-  const [fullName, setFullName] = useState("")
-  const [email, setEmail] = useState("")
-  const [password, setPassword] = useState("")
-  const [confirmPassword, setConfirmPassword] = useState("")
-  const [error, setError] = useState("")
-  const [loading, setLoading] = useState(false)
-  const [success, setSuccess] = useState(false)
-  const router = useRouter()
+export default async function Register({
+  searchParams,
+}: {
+  searchParams: { message: string; callbackUrl: string }
+}) {
+  const cookieStore = cookies()
 
-  const validateForm = () => {
-    if (!fullName.trim()) {
-      setError("Name is required")
-      return false
+  try {
+    // Since createClient is now async, we need to await it
+    const supabase = await createClient(cookieStore)
+
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+
+    // If the user is already logged in, redirect them
+    if (session) {
+      return redirect(searchParams.callbackUrl || "/")
     }
-
-    if (!email.trim()) {
-      setError("Email is required")
-      return false
-    }
-
-    if (!isAtlanEmail(email)) {
-      setError("Only @atlan.com email addresses are allowed to register")
-      return false
-    }
-
-    if (password.length < 6) {
-      setError("Password must be at least 6 characters")
-      return false
-    }
-
-    if (password !== confirmPassword) {
-      setError("Passwords do not match")
-      return false
-    }
-
-    return true
+  } catch (error) {
+    console.error("Error getting session:", error)
+    // Continue to registration page if there's an error getting the session
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError("")
-    setSuccess(false)
+  const signUp = async (formData: FormData) => {
+    "use server"
 
-    if (!validateForm()) return
-
-    setLoading(true)
+    const origin = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
+    const email = formData.get("email") as string
+    const password = formData.get("password") as string
+    const fullName = formData.get("fullName") as string
+    const cookieStore = cookies()
 
     try {
-      await signUp(email, password, fullName)
-      setSuccess(true)
-      // Redirect after a delay to show success message
-      setTimeout(() => {
-        router.push("/auth/login")
-      }, 3000)
-    } catch (error: any) {
-      console.error("Registration error:", error)
-      setError(error.message)
-    } finally {
-      setLoading(false)
+      // Check if it's an Atlan email
+      if (!isAtlanEmail(email)) {
+        return redirect(
+          `/auth/register?message=${encodeURIComponent("Only Atlan email addresses are allowed to register.")}${
+            searchParams.callbackUrl ? `&callbackUrl=${encodeURIComponent(searchParams.callbackUrl)}` : ""
+          }`,
+        )
+      }
+
+      // Since createClient is now async, we need to await it
+      const supabase = await createClient(cookieStore)
+
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: `${origin}/auth/callback`,
+          data: {
+            full_name: fullName,
+          },
+        },
+      })
+
+      if (error) {
+        return redirect(
+          `/auth/register?message=${encodeURIComponent(error.message)}${
+            searchParams.callbackUrl ? `&callbackUrl=${encodeURIComponent(searchParams.callbackUrl)}` : ""
+          }`,
+        )
+      }
+
+      return redirect("/auth/login?message=Check your email to confirm your account")
+    } catch (error) {
+      console.error("Error signing up:", error)
+      return redirect(
+        `/auth/register?message=${encodeURIComponent("An unexpected error occurred. Please try again.")}${
+          searchParams.callbackUrl ? `&callbackUrl=${encodeURIComponent(searchParams.callbackUrl)}` : ""
+        }`,
+      )
     }
   }
 
   return (
-    <div className="container flex h-screen flex-col items-center justify-center max-w-md">
-      <div className="mb-8 flex flex-col items-center text-center">
-        <Image
-          src="https://mqvcdyzqegzqfwvesoiz.supabase.co/storage/v1/object/public/email-assets//wellness.png"
-          width={80}
-          height={80}
-          alt="Spring into Wellness Logo"
-          className="object-contain"
-          unoptimized
-        />
-        <h1 className="mt-4 text-3xl font-bold">Spring into Wellness</h1>
-        <p className="text-muted-foreground">Create an account to join the wellness challenge</p>
-      </div>
-
-      <Card className="w-full">
-        <CardHeader>
-          <CardTitle>Sign Up</CardTitle>
-          <CardDescription>Create your account with your Atlan email</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {error && (
-              <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
+    <div className="flex min-h-screen items-center justify-center bg-navy-950 px-4 py-12">
+      <div className="w-full max-w-md">
+        <Card className="border-navy-800 bg-navy-900 text-white shadow-lg">
+          <CardHeader className="space-y-1 text-center">
+            <div className="flex justify-center mb-4">
+              <Image
+                src="/wellness-logo.png"
+                width={64}
+                height={64}
+                alt="Spring into Wellness Logo"
+                className="object-contain"
+              />
+            </div>
+            <CardTitle className="text-2xl font-bold tracking-tight">Create an account</CardTitle>
+            <CardDescription className="text-gray-400">Enter your details to get started</CardDescription>
+            {searchParams?.message && (
+              <p className="mt-2 rounded-lg bg-destructive/15 p-3 text-center text-sm text-destructive">
+                {searchParams.message}
+              </p>
             )}
-
-            {success && (
-              <Alert className="bg-green-900/30 text-green-300 border-green-800">
-                <AlertDescription>
-                  Registration successful! Please check your email to verify your account. Redirecting to login...
-                </AlertDescription>
-              </Alert>
-            )}
-
-            <div className="space-y-2">
-              <Label htmlFor="fullName">Full Name</Label>
-              <div className="relative">
-                <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <form action={signUp}>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="fullName" className="text-gray-300">
+                  Full Name
+                </Label>
                 <Input
                   id="fullName"
-                  type="text"
-                  placeholder="Your Name"
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  className="pl-9"
+                  name="fullName"
+                  placeholder="John Doe"
                   required
+                  className="border-navy-700 bg-navy-800 text-white placeholder:text-gray-500 focus:border-primary focus:ring-primary"
                 />
               </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+              <div className="space-y-2">
+                <Label htmlFor="email" className="text-gray-300">
+                  Email
+                </Label>
                 <Input
                   id="email"
-                  type="email"
-                  placeholder="you@atlan.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="pl-9"
+                  name="email"
+                  placeholder="name@atlan.com"
                   required
+                  type="email"
+                  className="border-navy-700 bg-navy-800 text-white placeholder:text-gray-500 focus:border-primary focus:ring-primary"
                 />
+                <p className="text-xs text-gray-400">Only Atlan email addresses are allowed to register.</p>
               </div>
-              {email && !isAtlanEmail(email) && (
-                <p className="text-xs text-red-500">Only @atlan.com email addresses are allowed</p>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
-              {password && password.length < 6 && (
-                <p className="text-xs text-red-500">Password must be at least 6 characters</p>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="confirmPassword">Confirm Password</Label>
-              <Input
-                id="confirmPassword"
-                type="password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                required
-              />
-              {confirmPassword && password !== confirmPassword && (
-                <p className="text-xs text-red-500">Passwords do not match</p>
-              )}
-            </div>
-
-            <Button type="submit" className="w-full" disabled={loading || success}>
-              {loading ? "Creating Account..." : "Create Account"}
-            </Button>
+              <div className="space-y-2">
+                <Label htmlFor="password" className="text-gray-300">
+                  Password
+                </Label>
+                <Input
+                  id="password"
+                  name="password"
+                  required
+                  type="password"
+                  className="border-navy-700 bg-navy-800 text-white placeholder:text-gray-500 focus:border-primary focus:ring-primary"
+                />
+                <p className="text-xs text-gray-400">Password must be at least 6 characters long.</p>
+              </div>
+            </CardContent>
+            <CardFooter className="flex flex-col space-y-4">
+              <Button
+                type="submit"
+                className="w-full bg-gradient-to-r from-teal-500 to-blue-500 hover:from-teal-600 hover:to-blue-600"
+              >
+                Sign Up
+              </Button>
+              <div className="text-center text-sm text-gray-400">
+                Already have an account?{" "}
+                <Link href="/auth/login" className="text-primary hover:underline">
+                  Sign in
+                </Link>
+              </div>
+            </CardFooter>
           </form>
-        </CardContent>
-        <CardFooter className="flex justify-center">
-          <p className="text-sm text-muted-foreground">
-            Already have an account?{" "}
-            <Link href="/auth/login" className="text-primary hover:underline">
-              Sign in
-            </Link>
-          </p>
-        </CardFooter>
-      </Card>
+        </Card>
+      </div>
     </div>
   )
 }

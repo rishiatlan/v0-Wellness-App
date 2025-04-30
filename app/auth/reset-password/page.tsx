@@ -42,7 +42,7 @@ export default function ResetPasswordPage() {
   }
 
   return (
-    <div className="container flex h-screen flex-col items-center justify-center max-w-md">
+    <div className="container flex h-screen flex-col items-center justify-center max-w-md mx-auto px-4">
       <div className="mb-8 flex flex-col items-center text-center">
         <Image
           src="https://mqvcdyzqegzqfwvesoiz.supabase.co/storage/v1/object/public/email-assets//wellness.png"
@@ -56,7 +56,7 @@ export default function ResetPasswordPage() {
         <p className="text-muted-foreground">Reset your password</p>
       </div>
 
-      <Card className="w-full">
+      <Card className="w-full shadow-lg">
         <CardHeader>
           <CardTitle>Reset Password</CardTitle>
           <CardDescription>Enter your Atlan email to receive a password reset link</CardDescription>

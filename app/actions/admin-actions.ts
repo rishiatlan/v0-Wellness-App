@@ -10,7 +10,7 @@ import { INITIAL_ADMIN_EMAILS } from "@/lib/admin-utils"
 
 export async function getCurrentUser() {
   const cookieStore = cookies()
-  const supabase = createClient(cookieStore)
+  const supabase = await createClient(cookieStore)
 
   const {
     data: { session },
