@@ -14,6 +14,8 @@ export async function signUp(email: string, password: string, fullName: string) 
   }
 
   try {
+    console.log("Attempting to sign up user:", email)
+
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -25,17 +27,22 @@ export async function signUp(email: string, password: string, fullName: string) 
       },
     })
 
-    if (error) throw error
+    if (error) {
+      console.error("Supabase signup error:", error.message, error)
+      throw error
+    }
 
+    console.log("Signup successful:", data)
     return data
   } catch (error: any) {
+    console.error("Exception during signup:", error)
     throw new Error(error.message)
   }
 }
 
 // Sign in with email and password
 export async function signIn(email: string, password: string) {
-  console.log("Authentication attempt in progress")
+  console.log("Authentication attempt in progress for:", email)
 
   try {
     // Use signInWithPassword for email/password auth
@@ -66,6 +73,9 @@ export async function signIn(email: string, password: string) {
       throw new Error("Authentication succeeded but no session was created")
     }
 
+    console.log("Authentication successful for:", email)
+    console.log("Session expires at:", new Date(data.session.expires_at! * 1000).toLocaleString())
+
     return data
   } catch (error: any) {
     console.error("Sign in function caught error:", error)
@@ -76,6 +86,7 @@ export async function signIn(email: string, password: string) {
 // Sign out
 export async function signOut() {
   try {
+    console.log("Signing out user")
     const { error } = await supabase.auth.signOut()
     if (error) {
       console.error("Error signing out:", error)

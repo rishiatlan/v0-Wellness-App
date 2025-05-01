@@ -129,11 +129,20 @@ export default async function Login({
           <CardHeader className="space-y-1 text-center">
             <div className="flex justify-center mb-4">
               <Image
-                src="/wellness-logo.png"
+                src="https://mqvcdyzqegzqfwvesoiz.supabase.co/storage/v1/object/public/email-assets//wellness.png"
                 width={64}
                 height={64}
                 alt="Spring into Wellness Logo"
                 className="object-contain"
+                onError={(e) => {
+                  // Fallback if image fails to load
+                  e.currentTarget.style.display = "none"
+                  const fallback = document.createElement("div")
+                  fallback.className =
+                    "w-16 h-16 bg-gradient-to-r from-teal-500 to-blue-500 rounded-full flex items-center justify-center text-white text-xl font-bold"
+                  fallback.textContent = "SW"
+                  e.currentTarget.parentNode?.appendChild(fallback)
+                }}
               />
             </div>
             <CardTitle className="text-2xl font-bold tracking-tight">Welcome back</CardTitle>

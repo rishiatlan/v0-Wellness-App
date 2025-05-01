@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useCallback, useRef, useMemo } from "react"
+import { useEffect, useState, useCallback } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Progress } from "@/components/ui/progress"
@@ -18,18 +18,18 @@ import {
   getActivitiesClientSafe,
   getDailyLogsClientSafe,
   getUserProfileClientSafe,
+  updateUserStreakClientSafe,
   getActivityHistoryClientSafe,
   recalculateUserPointsClientSafe,
   getTodayPointsClientSafe,
   createDefaultActivitiesClientSafe,
   getWeeklyStreakDataClientSafe,
+  recalculateUserStreakClientSafe,
   checkActivityAlreadyLoggedClientSafe,
-  prefetchCommonData,
 } from "@/lib/api-client-safe"
 
 // Add this to the imports
 import { verifyActivityPoints } from "@/app/actions/client-safe-actions"
-import { dataCache } from "@/lib/data-cache"
 
 type Activity = {
   id: string
@@ -79,9 +79,6 @@ export default function DailyTracker() {
   const [todayPoints, setTodayPoints] = useState(0)
   const [refreshing, setRefreshing] = useState(false)
   const [creatingDefaultActivities, setCreatingDefaultActivities] = useState(false)
-  const [dataFetchAttempted, setDataFetchAttempted] = useState(false)
-  const initialLoadTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const isMounted = useRef(true)
 
   // Add this state and function to the component
   const [weeklyStreak, setWeeklyStreak] = useState<any>({
@@ -99,13 +96,11 @@ export default function DailyTracker() {
 
   // Function to fetch weekly streak data
   const fetchWeeklyStreakData = useCallback(async () => {
-    if (!user || !isMounted.current) return
+    if (!user) return
 
     try {
       const data = await getWeeklyStreakDataClientSafe(user.id)
-      if (isMounted.current) {
-        setWeeklyStreak(data)
-      }
+      setWeeklyStreak(data)
     } catch (error) {
       console.error("Error fetching weekly streak data:", error)
     }
@@ -171,30 +166,40 @@ export default function DailyTracker() {
     }
   }
 
+  // Fix the calculateTodayPoints function to ensure it correctly updates the total points
+
   // Function to calculate today's points directly from completed activities
   const calculateTodayPoints = useCallback((activityList: Activity[]) => {
     // Count completed activities for verification
     const completedCount = activityList.filter((a) => a.completed).length
+    console.log(`Total completed activities: ${completedCount}`)
 
     const points = activityList.reduce((sum, activity) => {
       const pointsToAdd = activity.completed ? activity.points : 0
+      console.log(`Activity ${activity.name}: ${pointsToAdd} points (completed: ${activity.completed})`)
       return sum + pointsToAdd
     }, 0)
 
-    if (isMounted.current) {
-      setTodayPoints(points)
+    console.log(`Total points calculated: ${points}`)
+
+    // Verify the calculation is correct
+    if (completedCount * 5 !== points) {
+      console.error(`Point calculation mismatch! Expected ${completedCount * 5} but got ${points}`)
     }
+
+    setTodayPoints(points)
     return points
   }, [])
 
   // Function to fetch today's points directly from the database
   const fetchTodayPoints = useCallback(async () => {
-    if (!user || !localDate || !isMounted.current) return
+    if (!user || !localDate) return
 
     try {
       const result = await getTodayPointsClientSafe(user.id, localDate)
-      if (result.success && isMounted.current) {
+      if (result.success) {
         setTodayPoints(result.points)
+        console.log(`Today's points updated from database: ${result.points}`)
       }
     } catch (error) {
       console.error("Error fetching today's points:", error)
@@ -203,7 +208,7 @@ export default function DailyTracker() {
 
   // Function to create default activities for new users
   const createDefaultActivities = useCallback(async () => {
-    if (!user || !isMounted.current) return
+    if (!user) return
 
     try {
       setCreatingDefaultActivities(true)
@@ -226,10 +231,8 @@ export default function DailyTracker() {
             completed: completedActivityIds.includes(activity.id),
           }))
 
-          if (isMounted.current) {
-            setActivities(activitiesWithCompletionStatus)
-            calculateTodayPoints(activitiesWithCompletionStatus)
-          }
+          setActivities(activitiesWithCompletionStatus)
+          calculateTodayPoints(activitiesWithCompletionStatus)
 
           toast({
             title: "Welcome!",
@@ -243,9 +246,7 @@ export default function DailyTracker() {
             id: `temp-${index}`,
             completed: false,
           }))
-          if (isMounted.current) {
-            setActivities(localActivities)
-          }
+          setActivities(localActivities)
           toast({
             title: "Welcome!",
             description: "We've set up your default wellness activities. Start tracking now!",
@@ -259,9 +260,7 @@ export default function DailyTracker() {
           id: `temp-${index}`,
           completed: false,
         }))
-        if (isMounted.current) {
-          setActivities(localActivities)
-        }
+        setActivities(localActivities)
         toast({
           title: "Welcome!",
           description: "We've set up temporary activities for you to get started.",
@@ -275,60 +274,60 @@ export default function DailyTracker() {
         id: `temp-${index}`,
         completed: false,
       }))
-      if (isMounted.current) {
-        setActivities(localActivities)
-      }
+      setActivities(localActivities)
       toast({
         title: "Welcome!",
         description: "We've set up temporary activities for you to get started.",
       })
     } finally {
-      if (isMounted.current) {
-        setCreatingDefaultActivities(false)
-      }
+      setCreatingDefaultActivities(false)
     }
   }, [user, toast, calculateTodayPoints])
 
-  // Function to fetch activities and logs with optimized performance
+  // Function to fetch activities and logs
   const fetchActivitiesAndLogs = useCallback(async () => {
-    if (!user || !isMounted.current) return
+    if (!user) return
 
     try {
-      if (isMounted.current) {
-        setError(null)
-        setLoading(true)
-      }
+      setError(null)
+      setLoading(true)
 
       // Get the user's local date
       const userLocalDate = getUserLocalDate()
-      if (isMounted.current) {
-        setLocalDate(userLocalDate)
+      setLocalDate(userLocalDate)
+
+      // Use individual try/catch blocks for each request to handle partial failures
+      let profileData, activitiesData, logsData
+
+      try {
+        profileData = await getUserProfileClientSafe(user.id)
+      } catch (profileError) {
+        console.error("Error fetching user profile:", profileError)
+        profileData = {
+          id: user.id,
+          email: user.email || "user@example.com",
+          full_name: user.user_metadata?.full_name || "New User",
+          total_points: 0,
+          current_tier: 0,
+          current_streak: 0,
+        }
       }
 
-      // Use Promise.all for parallel fetching to improve performance
-      const [profileData, activitiesData, logsData] = await Promise.all([
-        getUserProfileClientSafe(user.id).catch((error) => {
-          console.error("Error fetching user profile:", error)
-          return {
-            id: user.id,
-            email: user.email || "user@example.com",
-            full_name: user.user_metadata?.full_name || "New User",
-            total_points: 0,
-            current_tier: 0,
-            current_streak: 0,
-          }
-        }),
-        getActivitiesClientSafe().catch((error) => {
-          console.error("Error fetching activities:", error)
-          return []
-        }),
-        getDailyLogsClientSafe(user.id, userLocalDate).catch((error) => {
-          console.error("Error fetching daily logs:", error)
-          return []
-        }),
-      ])
+      try {
+        activitiesData = await getActivitiesClientSafe()
+      } catch (activitiesError) {
+        console.error("Error fetching activities:", activitiesError)
+        activitiesData = []
+      }
 
-      if (!isMounted.current) return
+      try {
+        // Use the server action directly for more reliable data
+        const { getDailyLogs } = await import("@/app/actions/activity-actions")
+        logsData = await getDailyLogs(user.id, userLocalDate)
+      } catch (logsError) {
+        console.error("Error fetching daily logs:", logsError)
+        logsData = []
+      }
 
       setUserProfile(profileData)
 
@@ -351,29 +350,20 @@ export default function DailyTracker() {
       console.error("Error fetching data:", error)
       // Don't set error for new users, we'll handle this case
       if (error.message && (error.message.includes("not found") || error.message.includes("does not exist"))) {
-        if (isMounted.current) {
-          setActivities([])
-        }
+        setActivities([])
       } else {
         // Don't show error to user, just log it and continue with empty data
         console.error("Error in fetchActivitiesAndLogs:", error)
-        if (isMounted.current) {
-          setActivities([])
-        }
+        setActivities([])
       }
     } finally {
-      if (isMounted.current) {
-        setLoading(false)
-        setRefreshing(false)
-        setDataFetchAttempted(true) // Mark that we've attempted to fetch data
-      }
+      setLoading(false)
+      setRefreshing(false)
     }
   }, [user, calculateTodayPoints])
 
   // Update time until reset
   const updateTimeUntilReset = useCallback(() => {
-    if (!isMounted.current) return
-
     const msUntilMidnight = getTimeUntilMidnight()
     const hours = Math.floor(msUntilMidnight / (1000 * 60 * 60))
     const minutes = Math.floor((msUntilMidnight % (1000 * 60 * 60)) / (1000 * 60))
@@ -406,51 +396,24 @@ export default function DailyTracker() {
     }
   }, [fetchActivitiesAndLogs, updateTimeUntilReset])
 
-  // Initial data fetch with improved performance
+  // Initial data fetch
   useEffect(() => {
-    isMounted.current = true
-
-    // Only fetch if we have a user
-    if (user) {
-      // Prefetch common data for the user
-      prefetchCommonData(user.id)
-
-      // Fetch data for this page
-      fetchActivitiesAndLogs()
-      fetchWeeklyStreakData()
-
-      // Set a timeout to stop showing loading state after 3 seconds
-      initialLoadTimeoutRef.current = setTimeout(() => {
-        if (isMounted.current && loading) {
-          setLoading(false)
-          setError("Loading timed out. Please try refreshing the page.")
-        }
-      }, 3000) // 3 seconds timeout
-    } else {
-      // If no user, stop loading state
-      setLoading(false)
-    }
-
-    return () => {
-      isMounted.current = false
-      // Clean up timeout on unmount
-      if (initialLoadTimeoutRef.current) {
-        clearTimeout(initialLoadTimeoutRef.current)
-      }
-    }
-  }, [fetchActivitiesAndLogs, fetchWeeklyStreakData, user])
+    fetchActivitiesAndLogs()
+    fetchWeeklyStreakData()
+  }, [fetchActivitiesAndLogs, fetchWeeklyStreakData])
 
   // Create default activities if none exist
   useEffect(() => {
-    if (!loading && activities.length === 0 && user && dataFetchAttempted && isMounted.current) {
+    if (!loading && activities.length === 0 && user) {
       createDefaultActivities()
     }
-  }, [loading, activities, user, createDefaultActivities, dataFetchAttempted])
+  }, [loading, activities, user, createDefaultActivities])
 
   // Update the useEffect hook that updates today's points whenever activities change
   useEffect(() => {
-    if (activities.length > 0 && isMounted.current) {
-      calculateTodayPoints(activities)
+    if (activities.length > 0) {
+      const points = calculateTodayPoints(activities)
+      console.log(`Updated today's points to ${points} based on ${activities.length} activities`)
     }
   }, [activities, calculateTodayPoints])
 
@@ -467,11 +430,11 @@ export default function DailyTracker() {
 
   // Function to recalculate points
   const recalculatePoints = useCallback(async () => {
-    if (!user || !isMounted.current) return
+    if (!user) return
 
     try {
       const result = await recalculateUserPointsClientSafe(user.id)
-      if (result.success && isMounted.current) {
+      if (result.success) {
         // Refresh user profile to get updated points
         const profileData = await getUserProfileClientSafe(user.id)
         setUserProfile(profileData)
@@ -486,22 +449,189 @@ export default function DailyTracker() {
 
   // Function to fetch activity history
   const fetchActivityHistory = useCallback(async () => {
-    if (!user || !isMounted.current) return
+    if (!user) return
 
     try {
       setHistoryLoading(true)
       const history = await getActivityHistoryClientSafe(user.id, 14) // Get last 14 days
-      if (isMounted.current) {
-        setActivityHistory(history)
-        setHistoryLoading(false)
-      }
+      setActivityHistory(history)
     } catch (error) {
       console.error("Error fetching activity history:", error)
-      if (isMounted.current) {
-        setHistoryLoading(false)
-      }
+    } finally {
+      setHistoryLoading(false)
     }
   }, [user])
+
+  // Add a debounced version of the toggle function
+  const debouncedToggleActivity = useCallback(
+    debounce(async (activity, originalActivity) => {
+      setSavingActivity(activity.id)
+      setActivityError(null)
+      setShowRLSHelp(false)
+      setShowFKHelp(false)
+
+      // Log the activity being processed
+      console.log(`Processing activity in debounced function: ${activity.name} (${activity.id})`)
+
+      // Move the actual API call here
+      try {
+        // Only allow logging activities, not unlogging
+        // We know we're only logging (not unlogging) because we prevent toggling completed activities
+        const { logActivity } = await import("@/app/actions/activity-actions")
+        const result = await logActivity(
+          user.id,
+          activity.id,
+          localDate,
+          activity.points,
+          user.email || "",
+          user.user_metadata?.full_name || "",
+        )
+
+        if (!result.success) {
+          throw new Error(result.error || "Failed to log activity")
+        }
+
+        // Show confetti when completing an activity
+        confetti({
+          particleCount: 100,
+          spread: 70,
+          origin: { y: 0.6 },
+        })
+
+        toast({
+          title: `${activity.emoji} ${activity.name} completed!`,
+          description: `You earned ${activity.points} points`,
+        })
+
+        // Update streak when completing an activity
+        updateUserStreakClientSafe(user.id).catch((err) => {
+          console.error("Error updating streak:", err)
+        })
+
+        // Refresh user profile to get updated points
+        try {
+          const profileData = await getUserProfileClientSafe(user.id)
+          setUserProfile(profileData)
+
+          // Refresh history if we're on the history tab
+          if (activeTab === "history") {
+            fetchActivityHistory()
+          }
+
+          // Fetch today's points directly from the database to ensure accuracy
+          const pointsResult = await getTodayPointsClientSafe(user.id, localDate)
+          if (pointsResult.success) {
+            setTodayPoints(pointsResult.points)
+            console.log(`Today's points updated from database: ${pointsResult.points}`)
+          }
+
+          // Force a UI update for the progress bar
+          setActivities((prevActivities) => {
+            // Make sure the activity state is correct
+            const updatedActivities = prevActivities.map((a) => {
+              if (a.id === activity.id) {
+                return { ...a, completed: true }
+              }
+              return a
+            })
+
+            // Recalculate points from the updated activities
+            const newPoints = updatedActivities.reduce((sum, act) => {
+              return sum + (act.completed ? act.points : 0)
+            }, 0)
+
+            console.log(`Recalculated points after toggle: ${newPoints}`)
+            setTodayPoints(newPoints)
+
+            return updatedActivities
+          })
+        } catch (profileError: any) {
+          console.error("Error refreshing profile:", profileError)
+        }
+
+        // Recalculate points
+        await recalculatePoints()
+
+        // Force another UI update after all operations are complete
+        setActivities((prevActivities) => {
+          const updatedActivities = [...prevActivities]
+          // Recalculate points again to be sure
+          const finalPoints = updatedActivities.reduce((sum, act) => {
+            return sum + (act.completed ? act.points : 0)
+          }, 0)
+          console.log(`Final points calculation: ${finalPoints}`)
+          setTodayPoints(finalPoints)
+          return updatedActivities
+        })
+
+        // Recalculate streak when completing an activity
+        try {
+          const streakResult = await recalculateUserStreakClientSafe(user.id)
+          if (streakResult.success) {
+            console.log(`Streak recalculated: ${streakResult.streak} days`)
+          }
+        } catch (streakError) {
+          console.error("Error recalculating streak:", streakError)
+        }
+
+        // Refresh streak data
+        fetchWeeklyStreakData()
+      } catch (error: any) {
+        console.error("Error logging activity:", error)
+
+        // Revert the UI change if there was an error
+        setActivities((prevActivities) => {
+          return prevActivities.map((a) => {
+            if (a.id === activity.id) {
+              return originalActivity // Restore original activity state
+            }
+            return a
+          })
+        })
+
+        // Recalculate today's points after reverting
+        calculateTodayPoints(activities)
+
+        // Check if it's a duplicate entry error (RLS policy violation)
+        if (error.message.includes("row-level security policy")) {
+          setShowRLSHelp(true)
+          setActivityError("You have already logged this activity for today.")
+          toast({
+            title: "Already logged",
+            description: "You have already logged this activity for today.",
+            variant: "default",
+          })
+        }
+        // Check if it's a foreign key error
+        else if (error.message.includes("foreign key constraint")) {
+          setShowFKHelp(true)
+          setActivityError("Your profile is being set up. Please refresh the page to continue.")
+
+          // Try to refresh the page to create the user profile
+          window.location.reload()
+        }
+        // Check if it's an auth session error
+        else if (error.message.includes("Auth session missing")) {
+          setActivityError("Your session has expired. Please refresh the page or sign in again to continue.")
+        } else {
+          setActivityError("We couldn't update your activity. Please try again in a moment.")
+        }
+      } finally {
+        setSavingActivity(null)
+      }
+    }, 300),
+    [
+      user,
+      localDate,
+      toast,
+      calculateTodayPoints,
+      fetchTodayPoints,
+      fetchActivityHistory,
+      recalculatePoints,
+      fetchWeeklyStreakData,
+      activities,
+    ],
+  )
 
   // Function to handle tab changes
   const handleTabChange = (value: string) => {
@@ -513,14 +643,16 @@ export default function DailyTracker() {
 
   // Function to handle manual refresh
   const forceRefreshAllData = async () => {
-    if (!user || !isMounted.current) return
+    if (!user) return
 
     setRefreshing(true)
-    setError(null) // Clear any existing errors
 
     try {
-      // Clear all cache to ensure fresh data
-      dataCache.clearAll()
+      // Recalculate user points
+      await recalculateUserPointsClientSafe(user.id)
+
+      // Recalculate user streak
+      await recalculateUserStreakClientSafe(user.id)
 
       // Fetch fresh data
       await fetchActivitiesAndLogs()
@@ -542,9 +674,7 @@ export default function DailyTracker() {
         variant: "destructive",
       })
     } finally {
-      if (isMounted.current) {
-        setRefreshing(false)
-      }
+      setRefreshing(false)
     }
   }
 
@@ -556,8 +686,6 @@ export default function DailyTracker() {
   const [isVerifyingPoints, setIsVerifyingPoints] = useState(false)
 
   const handleVerifyAndFixPoints = async () => {
-    if (!isMounted.current) return
-
     setIsVerifyingPoints(true)
     try {
       const result = await verifyActivityPoints()
@@ -584,15 +712,17 @@ export default function DailyTracker() {
         variant: "destructive",
       })
     } finally {
-      if (isMounted.current) {
-        setIsVerifyingPoints(false)
-      }
+      setIsVerifyingPoints(false)
     }
   }
 
   // Function to toggle activity completion status
   const handleToggleActivity = async (activity: Activity) => {
-    if (!user || !isMounted.current) return
+    const handleRetry = () => {
+      window.location.reload()
+    }
+
+    if (!user) return
 
     // Prevent toggling if already saving
     if (savingActivity) {
@@ -627,32 +757,29 @@ export default function DailyTracker() {
           description: "This activity has already been logged today",
           variant: "destructive",
         })
-        if (isMounted.current) {
-          setSavingActivity(null)
-        }
+        setSavingActivity(null)
         return
       }
 
       // Optimistically update the UI
-      if (isMounted.current) {
-        setActivities((prevActivities) => {
-          const updatedActivities = prevActivities.map((a) => {
-            if (a.id === activity.id) {
-              return { ...a, completed: true }
-            }
-            return a
-          })
-
-          // Recalculate today's points with the updated activities
-          const newPoints = updatedActivities.reduce((sum, act) => {
-            return sum + (act.completed ? act.points : 0)
-          }, 0)
-
-          setTodayPoints(newPoints)
-
-          return updatedActivities
+      setActivities((prevActivities) => {
+        const updatedActivities = prevActivities.map((a) => {
+          if (a.id === activity.id) {
+            return { ...a, completed: true }
+          }
+          return a
         })
-      }
+
+        // Recalculate today's points with the updated activities
+        const newPoints = updatedActivities.reduce((sum, act) => {
+          return sum + (act.completed ? act.points : 0)
+        }, 0)
+
+        console.log(`Recalculated points after toggle: ${newPoints}`)
+        setTodayPoints(newPoints)
+
+        return updatedActivities
+      })
 
       // Call the server action directly for more reliable logging
       const { logActivity } = await import("@/app/actions/activity-actions")
@@ -681,47 +808,65 @@ export default function DailyTracker() {
         description: `You earned ${activity.points} points`,
       })
 
-      // Clear related caches
-      dataCache.clear(`daily-logs-${user.id}-${localDate}`)
-      dataCache.clear(`activity-logged-${user.id}-${activity.id}-${localDate}`)
-      dataCache.clear(`user-profile-${user.id}`)
-      dataCache.clear(`today-points-${user.id}-${localDate}`)
-      dataCache.clear(`weekly-streak-${user.id}`)
+      // Update streak when completing an activity
+      updateUserStreakClientSafe(user.id).catch((err) => {
+        console.error("Error updating streak:", err)
+      })
 
-      // Refresh data after successful activity completion
-      if (isMounted.current) {
+      // Refresh user profile to get updated points
+      try {
+        const profileData = await getUserProfileClientSafe(user.id)
+        setUserProfile(profileData)
+
+        // Refresh history if we're on the history tab
+        if (activeTab === "history") {
+          fetchActivityHistory()
+        }
+
         // Fetch today's points directly from the database to ensure accuracy
         const pointsResult = await getTodayPointsClientSafe(user.id, localDate)
-        if (pointsResult.success && isMounted.current) {
+        if (pointsResult.success) {
           setTodayPoints(pointsResult.points)
+          console.log(`Today's points updated from database: ${pointsResult.points}`)
+        }
+
+        // Recalculate streak when completing an activity
+        try {
+          const streakResult = await recalculateUserStreakClientSafe(user.id)
+          if (streakResult.success) {
+            console.log(`Streak recalculated: ${streakResult.streak} days`)
+          }
+        } catch (streakError) {
+          console.error("Error recalculating streak:", streakError)
         }
 
         // Refresh streak data
         fetchWeeklyStreakData()
+      } catch (error) {
+        console.error("Error refreshing data after activity completion:", error)
       }
     } catch (error: any) {
       console.error("Error logging activity:", error)
 
       // Revert the UI change if there was an error
-      if (isMounted.current) {
-        setActivities((prevActivities) => {
-          const revertedActivities = prevActivities.map((a) => {
-            if (a.id === activity.id) {
-              return originalActivity // Restore original activity state
-            }
-            return a
-          })
-
-          // Recalculate today's points after reverting
-          const revertedPoints = revertedActivities.reduce((sum, act) => {
-            return sum + (act.completed ? act.points : 0)
-          }, 0)
-
-          setTodayPoints(revertedPoints)
-
-          return revertedActivities
+      setActivities((prevActivities) => {
+        const revertedActivities = prevActivities.map((a) => {
+          if (a.id === activity.id) {
+            return originalActivity // Restore original activity state
+          }
+          return a
         })
-      }
+
+        // Recalculate today's points after reverting
+        const revertedPoints = revertedActivities.reduce((sum, act) => {
+          return sum + (act.completed ? act.points : 0)
+        }, 0)
+
+        console.log(`Reverted points calculation: ${revertedPoints}`)
+        setTodayPoints(revertedPoints)
+
+        return revertedActivities
+      })
 
       // Show appropriate error message
       if (error.message.includes("row-level security policy")) {
@@ -729,8 +874,8 @@ export default function DailyTracker() {
         setActivityError("You have already logged this activity for today.")
         toast({
           title: "Already logged",
-          description: "This activity has already been logged today.",
-          variant: "destructive",
+          description: "You have already logged this activity for today.",
+          variant: "default",
         })
       } else if (error.message.includes("foreign key constraint")) {
         setShowFKHelp(true)
@@ -744,51 +889,14 @@ export default function DailyTracker() {
         })
       }
     } finally {
-      if (isMounted.current) {
-        setSavingActivity(null)
-      }
+      setSavingActivity(null)
     }
   }
 
-  // Memoize the activity cards to prevent unnecessary re-renders
-  const activityCards = useMemo(() => {
-    return activities.map((activity) => (
-      <div
-        key={activity.id}
-        className={`flex items-center space-x-4 rounded-lg border p-4 transition-colors ${
-          activity.completed
-            ? "border-teal-200 bg-teal-50 dark:border-teal-900/50 dark:bg-teal-900/20"
-            : "border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950"
-        }`}
-      >
-        <div className="text-2xl">{activity.emoji}</div>
-        <div className="flex-1">
-          <div className="font-medium">{activity.name}</div>
-          <div className="text-xs text-muted-foreground">{activity.description}</div>
-          <div className="text-sm text-muted-foreground mt-1">{activity.points} points</div>
-        </div>
-        {savingActivity === activity.id ? (
-          <Loader2 className="h-5 w-5 animate-spin text-primary" />
-        ) : activity.completed ? (
-          <div className="flex h-6 w-6 items-center justify-center rounded-md bg-primary text-primary-foreground">
-            <CheckCircle2 className="h-4 w-4" />
-          </div>
-        ) : (
-          <Checkbox
-            checked={false}
-            onCheckedChange={() => handleToggleActivity(activity)}
-            className="h-6 w-6 border-2"
-          />
-        )}
-      </div>
-    ))
-  }, [activities, savingActivity])
-
   if (loading) {
     return (
-      <div className="container flex h-[calc(100vh-200px)] items-center justify-center flex-col">
-        <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
-        <p className="text-muted-foreground">Loading your activities...</p>
+      <div className="container flex h-[calc(100vh-200px)] items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     )
   }
@@ -800,20 +908,8 @@ export default function DailyTracker() {
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>{error}</AlertDescription>
         </Alert>
-        <div className="text-center mt-4">
-          <Button onClick={handleRefresh} disabled={refreshing}>
-            {refreshing ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Refreshing...
-              </>
-            ) : (
-              <>
-                <RefreshCw className="mr-2 h-4 w-4" />
-                Refresh Data
-              </>
-            )}
-          </Button>
+        <div className="text-center">
+          <Button onClick={() => window.location.reload()}>Retry</Button>
         </div>
       </div>
     )
@@ -829,7 +925,7 @@ export default function DailyTracker() {
           </CardHeader>
           <CardContent>
             <Button asChild>
-              <a href="/auth/login?callbackUrl=/daily-tracker">Sign In</a>
+              <a href="/auth/login">Sign In</a>
             </Button>
           </CardContent>
         </Card>
@@ -962,7 +1058,38 @@ export default function DailyTracker() {
                   <CardDescription>Complete these activities to earn points toward your wellness tier.</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="grid gap-4 sm:grid-cols-2">{activityCards}</div>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    {activities.map((activity) => (
+                      <div
+                        key={activity.id}
+                        className={`flex items-center space-x-4 rounded-lg border p-4 transition-colors ${
+                          activity.completed
+                            ? "border-teal-200 bg-teal-50 dark:border-teal-900/50 dark:bg-teal-900/20"
+                            : "border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950"
+                        }`}
+                      >
+                        <div className="text-2xl">{activity.emoji}</div>
+                        <div className="flex-1">
+                          <div className="font-medium">{activity.name}</div>
+                          <div className="text-xs text-muted-foreground">{activity.description}</div>
+                          <div className="text-sm text-muted-foreground mt-1">{activity.points} points</div>
+                        </div>
+                        {savingActivity === activity.id ? (
+                          <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                        ) : activity.completed ? (
+                          <div className="flex h-6 w-6 items-center justify-center rounded-md bg-primary text-primary-foreground">
+                            <CheckCircle2 className="h-4 w-4" />
+                          </div>
+                        ) : (
+                          <Checkbox
+                            checked={false}
+                            onCheckedChange={() => handleToggleActivity(activity)}
+                            className="h-6 w-6 border-2"
+                          />
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </CardContent>
               </Card>
             </TabsContent>

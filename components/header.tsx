@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { usePathname, useRouter } from "next/navigation"
+import { usePathname } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { Menu, LogOut, User, Shield } from "lucide-react"
@@ -41,15 +41,9 @@ const getNavigation = (userEmail) => {
 
 export default function Header() {
   const pathname = usePathname()
-  const router = useRouter()
   const isMobile = useMobile()
   const { user, loading, refreshSession } = useAuth()
-  const [isClient, setIsClient] = useState(false)
-
-  // Set isClient to true when component mounts
-  useEffect(() => {
-    setIsClient(true)
-  }, [])
+  const [imageError, setImageError] = useState(false)
 
   // Refresh session when header mounts to ensure we have the latest auth state
   useEffect(() => {
@@ -78,13 +72,20 @@ export default function Header() {
         <div className="container flex h-16 items-center justify-between">
           <div className="flex items-center gap-2">
             <Link href="/" className="flex items-center gap-2">
-              <Image
-                src="/wellness-logo.png"
-                width={32}
-                height={32}
-                alt="Spring into Wellness Logo"
-                className="object-contain"
-              />
+              {!imageError ? (
+                <Image
+                  src="https://mqvcdyzqegzqfwvesoiz.supabase.co/storage/v1/object/public/email-assets//wellness.png"
+                  width={32}
+                  height={32}
+                  alt="Spring into Wellness Logo"
+                  className="object-contain"
+                  onError={() => setImageError(true)}
+                />
+              ) : (
+                <div className="w-8 h-8 bg-gradient-to-r from-teal-500 to-blue-500 rounded-full flex items-center justify-center text-white text-xs font-bold">
+                  SW
+                </div>
+              )}
               <span className="font-bold text-white">Spring into Wellness</span>
             </Link>
           </div>
@@ -98,18 +99,25 @@ export default function Header() {
       <div className="container flex h-16 items-center justify-between">
         <div className="flex items-center gap-2">
           <Link href="/" className="flex items-center gap-2">
-            <Image
-              src="/wellness-logo.png"
-              width={32}
-              height={32}
-              alt="Spring into Wellness Logo"
-              className="object-contain"
-            />
+            {!imageError ? (
+              <Image
+                src="https://mqvcdyzqegzqfwvesoiz.supabase.co/storage/v1/object/public/email-assets//wellness.png"
+                width={32}
+                height={32}
+                alt="Spring into Wellness Logo"
+                className="object-contain"
+                onError={() => setImageError(true)}
+              />
+            ) : (
+              <div className="w-8 h-8 bg-gradient-to-r from-teal-500 to-blue-500 rounded-full flex items-center justify-center text-white text-xs font-bold">
+                SW
+              </div>
+            )}
             <span className="hidden font-bold text-white sm:inline-block">Spring into Wellness</span>
           </Link>
         </div>
 
-        {isClient && isMobile ? (
+        {isMobile ? (
           <Sheet>
             <SheetTrigger asChild>
               <Button variant="outline" size="icon" className="border-navy-700 bg-navy-900 hover:bg-navy-800">
@@ -158,7 +166,7 @@ export default function Header() {
                       asChild
                       className="w-full bg-gradient-to-r from-teal-500 to-blue-500 hover:from-teal-600 hover:to-blue-600"
                     >
-                      <Link href={`/auth/login?callbackUrl=${encodeURIComponent(pathname || "/")}`}>Sign In</Link>
+                      <Link href="/auth/login">Sign In</Link>
                     </Button>
                   )}
                 </div>
@@ -179,7 +187,7 @@ export default function Header() {
                 {item.name}
               </Link>
             ))}
-            {isClient && !isMobile && user?.email && isAdmin(user.email) && (
+            {!isMobile && user?.email && isAdmin(user.email) && (
               <Button
                 variant="outline"
                 size="sm"
@@ -196,7 +204,7 @@ export default function Header() {
         )}
 
         <div className="flex items-center gap-2">
-          {isClient && !loading && (
+          {!loading && (
             <>
               {user ? (
                 <DropdownMenu>
@@ -232,7 +240,7 @@ export default function Header() {
                   asChild
                   className="bg-gradient-to-r from-teal-500 to-blue-500 hover:from-teal-600 hover:to-blue-600"
                 >
-                  <Link href={`/auth/login?callbackUrl=${encodeURIComponent(pathname || "/")}`}>Log In</Link>
+                  <Link href="/auth/login">Log In</Link>
                 </Button>
               )}
             </>

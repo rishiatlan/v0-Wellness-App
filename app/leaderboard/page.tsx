@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Input } from "@/components/ui/input"
@@ -17,7 +17,6 @@ import {
 } from "@/app/actions/leaderboard-actions"
 import { Button } from "@/components/ui/button"
 import { getAvatarUrl, getInitials } from "@/lib/avatar-utils"
-import { dataCache } from "@/lib/data-cache"
 
 // Helper function to extract name from email
 function extractNameFromEmail(email: string): string {
@@ -48,78 +47,31 @@ export default function Leaderboard() {
   const [searching, setSearching] = useState(false)
   const [activeTab, setActiveTab] = useState("individuals")
   const [refreshing, setRefreshing] = useState(false)
-  const isMounted = useRef(true)
-  const initialLoadTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
-  const fetchLeaderboardData = useCallback(async () => {
-    if (!isMounted.current) return
+  useEffect(() => {
+    const fetchLeaderboardData = async () => {
+      try {
+        setLoading(true)
+        const [individualsData, teamsData] = await Promise.all([getIndividualLeaderboard(), getTeamLeaderboard()])
 
-    try {
-      setLoading(true)
-
-      // Check cache first
-      const individualsCacheKey = `individuals-leaderboard-${timeFilter}`
-      const teamsCacheKey = `teams-leaderboard-${timeFilter}`
-
-      let individualsData, teamsData
-
-      if (dataCache.has(individualsCacheKey)) {
-        individualsData = dataCache.get(individualsCacheKey)
-      } else {
-        individualsData = await getIndividualLeaderboard()
-        dataCache.set(individualsCacheKey, individualsData, 2 * 60 * 1000) // Cache for 2 minutes
-      }
-
-      if (dataCache.has(teamsCacheKey)) {
-        teamsData = dataCache.get(teamsCacheKey)
-      } else {
-        teamsData = await getTeamLeaderboard()
-        dataCache.set(teamsCacheKey, teamsData, 2 * 60 * 1000) // Cache for 2 minutes
-      }
-
-      if (isMounted.current) {
         setIndividuals(individualsData)
         setFilteredIndividuals(individualsData)
         setTeams(teamsData)
         setFilteredTeams(teamsData)
-        setLoading(false)
-      }
-    } catch (error) {
-      console.error("Error fetching leaderboard data:", error)
-      if (isMounted.current) {
+      } catch (error) {
+        console.error("Error fetching leaderboard data:", error)
         toast({
           title: "Error",
           description: "Failed to load leaderboard data. Please try again.",
           variant: "destructive",
         })
+      } finally {
         setLoading(false)
       }
     }
-  }, [toast, timeFilter])
-
-  useEffect(() => {
-    isMounted.current = true
 
     fetchLeaderboardData()
-
-    // Set a timeout to stop showing loading state after 3 seconds
-    initialLoadTimeoutRef.current = setTimeout(() => {
-      if (isMounted.current && loading) {
-        setLoading(false)
-      }
-    }, 3000) // 3 seconds timeout
-
-    return () => {
-      isMounted.current = false
-      if (initialLoadTimeoutRef.current) {
-        clearTimeout(initialLoadTimeoutRef.current)
-      }
-      if (searchTimeoutRef.current) {
-        clearTimeout(searchTimeoutRef.current)
-      }
-    }
-  }, [fetchLeaderboardData])
+  }, [toast])
 
   useEffect(() => {
     const handleSearch = async () => {
@@ -129,118 +81,73 @@ export default function Leaderboard() {
         return
       }
 
-      if (!isMounted.current) return
-
       setSearching(true)
 
       try {
-        // Check cache first
-        const searchCacheKey = `search-${activeTab}-${searchQuery}`
-
-        if (dataCache.has(searchCacheKey)) {
-          const cachedResults = dataCache.get(searchCacheKey)
-          if (activeTab === "individuals") {
-            setFilteredIndividuals(cachedResults)
-          } else {
-            setFilteredTeams(cachedResults)
-          }
-          setSearching(false)
-          return
-        }
-
         if (activeTab === "individuals") {
           const results = await searchUsers(searchQuery)
-          const rankedResults = results.map((user, index) => ({
-            ...user,
-            rank: index + 1,
-            badge: index < 3 ? ["🥇", "🥈", "🥉"][index] : null,
-          }))
-
-          if (isMounted.current) {
-            setFilteredIndividuals(rankedResults)
-            dataCache.set(searchCacheKey, rankedResults, 60 * 1000) // Cache for 1 minute
-          }
+          setFilteredIndividuals(
+            results.map((user, index) => ({
+              ...user,
+              rank: index + 1,
+              badge: index < 3 ? ["🥇", "🥈", "🥉"][index] : null,
+            })),
+          )
         } else {
           const results = await searchTeams(searchQuery)
-          const rankedResults = results.map((team, index) => ({
-            ...team,
-            rank: index + 1,
-            badge: index < 3 ? ["🥇", "🥈", "🥉"][index] : null,
-          }))
-
-          if (isMounted.current) {
-            setFilteredTeams(rankedResults)
-            dataCache.set(searchCacheKey, rankedResults, 60 * 1000) // Cache for 1 minute
-          }
+          setFilteredTeams(
+            results.map((team, index) => ({
+              ...team,
+              rank: index + 1,
+              badge: index < 3 ? ["🥇", "🥈", "🥉"][index] : null,
+            })),
+          )
         }
       } catch (error) {
         console.error("Error searching:", error)
       } finally {
-        if (isMounted.current) {
-          setSearching(false)
-        }
+        setSearching(false)
       }
     }
 
     // Debounce search
-    if (searchTimeoutRef.current) {
-      clearTimeout(searchTimeoutRef.current)
-    }
-
-    searchTimeoutRef.current = setTimeout(() => {
+    const timeoutId = setTimeout(() => {
       handleSearch()
     }, 300)
 
-    return () => {
-      if (searchTimeoutRef.current) {
-        clearTimeout(searchTimeoutRef.current)
-      }
-    }
+    return () => clearTimeout(timeoutId)
   }, [searchQuery, activeTab, individuals, teams])
 
   const handleRefresh = async () => {
-    if (!isMounted.current) return
-
     setRefreshing(true)
     try {
-      // Clear cache
-      dataCache.clear(`individuals-leaderboard-${timeFilter}`)
-      dataCache.clear(`teams-leaderboard-${timeFilter}`)
-
       const [individualsData, teamsData] = await Promise.all([getIndividualLeaderboard(), getTeamLeaderboard()])
 
-      if (isMounted.current) {
-        setIndividuals(individualsData)
-        setFilteredIndividuals(individualsData)
-        setTeams(teamsData)
-        setFilteredTeams(teamsData)
+      setIndividuals(individualsData)
+      setFilteredIndividuals(individualsData)
+      setTeams(teamsData)
+      setFilteredTeams(teamsData)
 
-        toast({
-          title: "Refreshed",
-          description: "Leaderboard data has been updated.",
-        })
-      }
+      toast({
+        title: "Refreshed",
+        description: "Leaderboard data has been updated.",
+      })
     } catch (error) {
       console.error("Error refreshing leaderboard data:", error)
-      if (isMounted.current) {
-        toast({
-          title: "Error",
-          description: "Failed to refresh leaderboard data. Please try again.",
-          variant: "destructive",
-        })
-      }
+      toast({
+        title: "Error",
+        description: "Failed to refresh leaderboard data. Please try again.",
+        variant: "destructive",
+      })
     } finally {
-      if (isMounted.current) {
-        setRefreshing(false)
-      }
+      setRefreshing(false)
     }
   }
 
   if (loading) {
     return (
-      <div className="container flex h-[calc(100vh-200px)] items-center justify-center flex-col">
-        <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
-        <p className="text-muted-foreground">Loading leaderboard data...</p>
+      <div className="container flex h-[calc(100vh-200px)] items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     )
   }

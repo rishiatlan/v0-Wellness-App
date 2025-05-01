@@ -1,17 +1,18 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
-import { Trophy, TrendingUp, Loader2, AlertCircle, RefreshCw } from "lucide-react"
+import { Trophy, TrendingUp, Loader2, AlertCircle } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { useToast } from "@/hooks/use-toast"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import CalendarView from "./calendar-view"
-import { getUserProfileClientSafe } from "@/lib/api-client-safe"
-import { dataCache } from "@/lib/data-cache"
+
+// Assume getUserProfileClientSafe is defined in "@/lib/auth" or a similar module
+import { getUserProfileClientSafe } from "@/lib/auth" // Adjust the import path as needed
 
 export default function MyProgress() {
   const { user } = useAuth()
@@ -19,25 +20,18 @@ export default function MyProgress() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [userProfile, setUserProfile] = useState<any>(null)
-  const [refreshing, setRefreshing] = useState(false)
-  const isMounted = useRef(true)
-  const initialLoadTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
-  const fetchUserProfile = useCallback(async () => {
-    if (!user || !isMounted.current) return
+  useEffect(() => {
+    const fetchUserProfile = async () => {
+      if (!user) return
 
-    try {
-      setLoading(true)
-      const profile = await getUserProfileClientSafe(user.id)
-
-      if (isMounted.current) {
+      try {
+        setLoading(true)
+        const profile = await getUserProfileClientSafe(user.id)
         setUserProfile(profile)
-        setLoading(false)
-      }
-    } catch (error) {
-      console.error("Error fetching user profile:", error)
-      // Don't show error for new users, just create a default profile
-      if (isMounted.current) {
+      } catch (error) {
+        console.error("Error fetching user profile:", error)
+        // Don't show error for new users, just create a default profile
         setUserProfile({
           id: user.id,
           email: user.email || "",
@@ -49,74 +43,24 @@ export default function MyProgress() {
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         })
+      } finally {
         setLoading(false)
       }
     }
-  }, [user])
 
-  const handleRefresh = useCallback(async () => {
-    if (!user || !isMounted.current) return
+    fetchUserProfile()
+  }, [user, toast])
 
-    setRefreshing(true)
+  const handleRetry = () => {
+    setLoading(true)
     setError(null)
-
-    try {
-      // Clear cache for user profile
-      dataCache.clear(`user-profile-${user.id}`)
-
-      // Fetch fresh data
-      await fetchUserProfile()
-
-      toast({
-        title: "Refresh Complete",
-        description: "Your progress data has been refreshed",
-      })
-    } catch (error) {
-      console.error("Error refreshing data:", error)
-      if (isMounted.current) {
-        toast({
-          title: "Refresh Error",
-          description: "There was a problem refreshing your data",
-          variant: "destructive",
-        })
-      }
-    } finally {
-      if (isMounted.current) {
-        setRefreshing(false)
-      }
-    }
-  }, [user, fetchUserProfile, toast])
-
-  useEffect(() => {
-    isMounted.current = true
-
-    if (user) {
-      fetchUserProfile()
-
-      // Set a timeout to stop showing loading state after 3 seconds
-      initialLoadTimeoutRef.current = setTimeout(() => {
-        if (isMounted.current && loading) {
-          setLoading(false)
-          setError("Loading timed out. Please try refreshing the page.")
-        }
-      }, 3000) // 3 seconds timeout
-    } else {
-      setLoading(false)
-    }
-
-    return () => {
-      isMounted.current = false
-      if (initialLoadTimeoutRef.current) {
-        clearTimeout(initialLoadTimeoutRef.current)
-      }
-    }
-  }, [user, fetchUserProfile])
+    window.location.reload()
+  }
 
   if (loading) {
     return (
-      <div className="container flex h-[calc(100vh-200px)] items-center justify-center flex-col">
-        <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
-        <p className="text-muted-foreground">Loading your progress data...</p>
+      <div className="container flex h-[calc(100vh-200px)] items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     )
   }
@@ -129,19 +73,7 @@ export default function MyProgress() {
           <AlertDescription>{error}</AlertDescription>
         </Alert>
         <div className="text-center">
-          <Button onClick={handleRefresh} disabled={refreshing}>
-            {refreshing ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Refreshing...
-              </>
-            ) : (
-              <>
-                <RefreshCw className="mr-2 h-4 w-4" />
-                Refresh Data
-              </>
-            )}
-          </Button>
+          <Button onClick={handleRetry}>Retry</Button>
         </div>
       </div>
     )
@@ -154,7 +86,7 @@ export default function MyProgress() {
           <h1 className="text-3xl font-bold tracking-tighter sm:text-4xl">My Progress</h1>
           <p className="mt-4 text-muted-foreground">Please sign in to view your progress.</p>
           <Button className="mt-4" asChild>
-            <a href="/auth/login?callbackUrl=/my-progress">Sign In</a>
+            <a href="/auth/login">Sign In</a>
           </Button>
         </div>
       </div>
@@ -223,21 +155,9 @@ export default function MyProgress() {
 
   return (
     <div className="container px-4 py-8">
-      <div className="mb-8 space-y-2 flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tighter sm:text-4xl">My Progress</h1>
-          <p className="text-muted-foreground">Track your wellness journey and tier progress.</p>
-        </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleRefresh}
-          disabled={refreshing}
-          className="flex items-center gap-1"
-        >
-          <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
-          Refresh
-        </Button>
+      <div className="mb-8 space-y-2">
+        <h1 className="text-3xl font-bold tracking-tighter sm:text-4xl">My Progress</h1>
+        <p className="text-muted-foreground">Track your wellness journey and tier progress.</p>
       </div>
 
       <div className="grid gap-6 md:grid-cols-3">
