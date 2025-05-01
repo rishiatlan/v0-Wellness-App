@@ -43,7 +43,7 @@ type Activity = {
 // Default activities for new users
 const DEFAULT_ACTIVITIES = [
   { name: "Mindfulness", emoji: "🧘", points: 5, description: "10 min meditation/yoga/deep breathing" },
-  { name: "Hydration", emoji: "💧", points: 5, description: "80oz water" },
+  { name: "Hydration", emoji: "💧", points: 5, description: "80oz (2.36 liters) water" },
   { name: "Movement", emoji: "👣", points: 5, description: "7,000 steps" },
   { name: "Sleep", emoji: "😴", points: 5, description: "7+ hours" },
   { name: "Sunshine", emoji: "☀️", points: 5, description: "15 min outdoors" },

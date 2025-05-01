@@ -97,6 +97,16 @@ export default function ResetPasswordPage() {
               )}
             </div>
 
+            <div className="text-xs text-muted-foreground space-y-1">
+              <p>When you reset your password, please remember:</p>
+              <ul className="list-disc pl-4 space-y-0.5">
+                <li>Password must be at least 6 characters long</li>
+                <li>Include at least one uppercase letter</li>
+                <li>Include at least one number</li>
+                <li>Special characters are recommended for better security</li>
+              </ul>
+            </div>
+
             <Button type="submit" className="w-full" disabled={loading || success}>
               {loading ? "Sending..." : "Send Reset Link"}
             </Button>

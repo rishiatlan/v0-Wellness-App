@@ -1,52 +1,41 @@
 import type React from "react"
-import { Inter } from "next/font/google"
 import "./globals.css"
-import Header from "@/components/header"
-import Footer from "@/components/footer"
+import { Inter } from "next/font/google"
 import { ThemeProvider } from "@/components/theme-provider"
 import { AuthProvider } from "@/lib/auth-context"
-import ProtectedLayout from "./protected-layout"
-import { ErrorBoundary } from "@/components/error-boundary"
+import { Toaster } from "@/components/ui/toaster"
+import { PreLaunchBanner } from "@/components/pre-launch-banner"
+import { getChallengeStatus } from "@/app/actions/challenge-actions"
 
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata = {
-  title: "Atlan Spring into Wellness",
-  description: "61-day wellness challenge for Atlan employees (May 1 – June 30, 2025)",
-  icons: {
-    icon: [
-      { url: "/favicon.ico", sizes: "any" },
-      { url: "/favicon-16x16.png", sizes: "16x16", type: "image/png" },
-      { url: "/favicon-32x32.png", sizes: "32x32", type: "image/png" },
-    ],
-    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
-    other: [{ rel: "mask-icon", url: "/favicon.ico", color: "#1cb0b5" }],
-  },
-  manifest: "/site.webmanifest",
+  title: "Spring into Wellness",
+  description: "Atlan's Spring Wellness Challenge",
     generator: 'v0.dev'
 }
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // Get challenge status
+  const { started, startDate } = await getChallengeStatus()
+
+  // Default to tomorrow if no start date is set
+  const launchDate = startDate ? new Date(startDate) : new Date(Date.now() + 24 * 60 * 60 * 1000)
+
   return (
-    <html lang="en" className="dark">
+    <html lang="en" suppressHydrationWarning>
       <body className={inter.className}>
-        <ErrorBoundary>
+        <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
           <AuthProvider>
-            <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false} forcedTheme="dark">
-              <div className="flex min-h-screen flex-col">
-                <Header />
-                <main className="flex-1 mx-auto w-full max-w-7xl">
-                  <ProtectedLayout>{children}</ProtectedLayout>
-                </main>
-                <Footer />
-              </div>
-            </ThemeProvider>
+            <div className="min-h-screen flex flex-col">
+              {/* Show pre-launch banner if challenge hasn't started */}
+              <PreLaunchBanner launchDate={launchDate} isChallengeLive={started} />
+
+              {children}
+            </div>
+            <Toaster />
           </AuthProvider>
-        </ErrorBoundary>
+        </ThemeProvider>
       </body>
     </html>
   )

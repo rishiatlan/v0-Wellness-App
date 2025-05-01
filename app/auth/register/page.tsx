@@ -146,7 +146,15 @@ export default async function Register({
                   type="password"
                   className="border-navy-700 bg-navy-800 text-white placeholder:text-gray-500 focus:border-primary focus:ring-primary"
                 />
-                <p className="text-xs text-gray-400">Password must be at least 6 characters long.</p>
+                <div className="text-xs text-gray-400 space-y-1">
+                  <p>Password requirements:</p>
+                  <ul className="list-disc pl-4 space-y-0.5">
+                    <li>At least 6 characters long</li>
+                    <li>Include at least one uppercase letter</li>
+                    <li>Include at least one number</li>
+                    <li>Special characters are recommended</li>
+                  </ul>
+                </div>
               </div>
             </CardContent>
             <CardFooter className="flex flex-col space-y-4">

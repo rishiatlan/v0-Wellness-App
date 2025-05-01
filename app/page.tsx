@@ -175,7 +175,7 @@ export default function Home() {
             <CardContent className="pt-6">
               <div className="text-4xl mb-2">💧</div>
               <CardTitle className="text-base mb-1">Hydration</CardTitle>
-              <CardDescription className="text-xs">80oz water</CardDescription>
+              <CardDescription className="text-xs">80oz (2.36 liters) water</CardDescription>
             </CardContent>
           </Card>
 

@@ -1,3 +1,4 @@
+import { CardFooter } from "@/components/ui/card"
 import Link from "next/link"
 import { redirect } from "next/navigation"
 import { cookies } from "next/headers"
@@ -5,7 +6,7 @@ import { createClient } from "@/lib/supabase/server"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import Image from "next/image"
 
 export default async function Login({
@@ -43,22 +44,44 @@ export default async function Login({
       // Since createClient is now async, we need to await it
       const supabase = await createClient(cookieStore)
 
-      const { error } = await supabase.auth.signInWithPassword({
+      // Improved error logging
+      console.log(`Attempting to sign in user: ${email}`)
+
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       })
 
       if (error) {
+        console.error("Authentication error:", error.message, error)
+
+        // More specific error messages based on error type
+        let errorMessage = error.message
+        if (error.message.includes("Invalid login credentials")) {
+          errorMessage = "Invalid email or password. Please try again."
+        } else if (error.message.includes("Email not confirmed")) {
+          errorMessage = "Please check your email to confirm your account before logging in."
+        }
+
         return redirect(
-          `/auth/login?message=${encodeURIComponent(error.message)}${searchParams.callbackUrl ? `&callbackUrl=${encodeURIComponent(searchParams.callbackUrl)}` : ""}`,
+          `/auth/login?message=${encodeURIComponent(errorMessage)}${searchParams.callbackUrl ? `&callbackUrl=${encodeURIComponent(searchParams.callbackUrl)}` : ""}`,
         )
       }
 
+      // Verify we have a session
+      if (!data.session) {
+        console.error("No session created after successful authentication")
+        return redirect(
+          `/auth/login?message=${encodeURIComponent("Authentication succeeded but session creation failed. Please try again.")}${searchParams.callbackUrl ? `&callbackUrl=${encodeURIComponent(searchParams.callbackUrl)}` : ""}`,
+        )
+      }
+
+      console.log("User authenticated successfully, redirecting...")
       return redirect(searchParams.callbackUrl || "/")
-    } catch (error) {
-      console.error("Error signing in:", error)
+    } catch (error: any) {
+      console.error("Unexpected error during sign in:", error)
       return redirect(
-        `/auth/login?message=${encodeURIComponent("An unexpected error occurred. Please try again.")}${searchParams.callbackUrl ? `&callbackUrl=${encodeURIComponent(searchParams.callbackUrl)}` : ""}`,
+        `/auth/login?message=${encodeURIComponent("An unexpected error occurred. Please try again later.")}${searchParams.callbackUrl ? `&callbackUrl=${encodeURIComponent(searchParams.callbackUrl)}` : ""}`,
       )
     }
   }
@@ -82,6 +105,11 @@ export default async function Login({
             {searchParams?.message && (
               <p className="mt-2 rounded-lg bg-destructive/15 p-3 text-center text-sm text-destructive">
                 {searchParams.message}
+                {searchParams.message.includes("VPN") && (
+                  <span className="block mt-1 font-semibold">
+                    Note: VPN connections may interfere with authentication. Try disabling your VPN.
+                  </span>
+                )}
               </p>
             )}
           </CardHeader>

@@ -46,7 +46,18 @@ export async function signIn(email: string, password: string) {
 
     if (error) {
       console.error("Supabase auth error:", error.message, error)
-      throw error
+
+      // Check for specific error types to provide better user feedback
+      if (error.message.includes("Invalid login credentials")) {
+        throw new Error("Invalid email or password. Please try again.")
+      } else if (error.message.includes("Email not confirmed")) {
+        throw new Error("Please verify your email address before logging in.")
+      } else if (error.message.includes("rate limit")) {
+        throw new Error("Too many login attempts. Please try again later.")
+      } else {
+        // If using a VPN, this might be the issue
+        throw new Error("Authentication failed. If you're using a VPN, please try disabling it.")
+      }
     }
 
     // Verify the session was created
