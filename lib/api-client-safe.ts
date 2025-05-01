@@ -8,6 +8,19 @@ import {
   updateUserStreakClient,
 } from "@/lib/api-client"
 
+// Add this at the top of the file
+const cache = new Map()
+const CACHE_TTL = 60000 // 1 minute cache TTL
+const API_TIMEOUT = 8000 // 8 second timeout
+
+// Helper function to implement timeout
+const withTimeout = (promise, ms) => {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error("Request timed out")), ms)),
+  ])
+}
+
 // Utility function for conditional logging
 const logDebug = (message: string, data?: any) => {
   if (process.env.NODE_ENV !== "production") {
@@ -28,23 +41,54 @@ export async function checkActivityAlreadyLoggedClientSafe(userId: string, activ
   }
 }
 
+// Add caching to getActivitiesClientSafe
 export async function getActivitiesClientSafe() {
+  const cacheKey = "activities"
+  const cachedData = cache.get(cacheKey)
+
+  if (cachedData && Date.now() - cachedData.timestamp < CACHE_TTL) {
+    return cachedData.data
+  }
+
   try {
-    return await getActivitiesClient()
+    const result = await withTimeout(getActivitiesClient(), API_TIMEOUT)
+    cache.set(cacheKey, { data: result, timestamp: Date.now() })
+    return result
   } catch (error) {
     console.error("Error in getActivitiesClientSafe:", error)
-    throw error
+
+    // Return cached data even if expired in case of error
+    if (cachedData) {
+      return cachedData.data
+    }
+
+    return []
   }
 }
 
+// Add caching to getDailyLogsClientSafe
 export async function getDailyLogsClientSafe(userId: string, date: string) {
+  const cacheKey = `daily_logs_${userId}_${date}`
+  const cachedData = cache.get(cacheKey)
+
+  if (cachedData && Date.now() - cachedData.timestamp < CACHE_TTL) {
+    return cachedData.data
+  }
+
   try {
     // Import the server action directly for more reliable data access
     const { getDailyLogs } = await import("@/app/actions/activity-actions")
-    return await getDailyLogs(userId, date)
+    const result = await withTimeout(getDailyLogs(userId, date), API_TIMEOUT)
+    cache.set(cacheKey, { data: result, timestamp: Date.now() })
+    return result
   } catch (error) {
     console.error("Error in getDailyLogsClientSafe:", error)
-    // Return empty array instead of throwing to prevent UI disruption
+
+    // Return cached data even if expired in case of error
+    if (cachedData) {
+      return cachedData.data
+    }
+
     return []
   }
 }
@@ -74,12 +118,39 @@ export async function toggleActivityClientSafe(
   }
 }
 
+// Add caching to getUserProfileClientSafe
 export async function getUserProfileClientSafe(userId: string) {
+  const cacheKey = `user_profile_${userId}`
+  const cachedData = cache.get(cacheKey)
+
+  if (cachedData && Date.now() - cachedData.timestamp < CACHE_TTL) {
+    return cachedData.data
+  }
+
   try {
-    return await getUserProfileClient(userId)
+    const result = await withTimeout(getUserProfileClient(userId), API_TIMEOUT)
+    cache.set(cacheKey, { data: result, timestamp: Date.now() })
+    return result
   } catch (error) {
     console.error("Error in getUserProfileClientSafe:", error)
-    throw error
+
+    // Return cached data even if expired in case of error
+    if (cachedData) {
+      return cachedData.data
+    }
+
+    // Return default profile if no cached data
+    return {
+      id: userId,
+      email: "",
+      full_name: "User",
+      total_points: 0,
+      current_tier: 0,
+      current_streak: 0,
+      team_id: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }
   }
 }
 

@@ -27,8 +27,19 @@ export default function MyProgress() {
 
       try {
         setLoading(true)
+
+        // Add timeout to prevent infinite loading
+        const timeoutId = setTimeout(() => {
+          if (loading) {
+            setLoading(false)
+            setError("Request timed out. Please try refreshing the page.")
+          }
+        }, 10000)
+
         const profile = await getUserProfileClientSafe(user.id)
         setUserProfile(profile)
+
+        clearTimeout(timeoutId)
       } catch (error) {
         console.error("Error fetching user profile:", error)
         // Don't show error for new users, just create a default profile
@@ -61,6 +72,27 @@ export default function MyProgress() {
     return (
       <div className="container flex h-[calc(100vh-200px)] items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    )
+  }
+
+  // Add this right after the loading check
+  if (user && !userProfile) {
+    return (
+      <div className="container py-8">
+        <Card>
+          <CardHeader>
+            <CardTitle>Loading Your Progress</CardTitle>
+            <CardDescription>Please wait while we load your progress data...</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col items-center justify-center py-8">
+            <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
+            <p>This may take a few moments...</p>
+            <Button variant="outline" className="mt-4" onClick={() => window.location.reload()}>
+              Refresh Page
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     )
   }

@@ -24,15 +24,21 @@ export async function getWeeklyStreakData(userId: string) {
     const startDate = startOfWeek.toISOString().split("T")[0]
     const endDate = endOfWeek.toISOString().split("T")[0]
 
-    console.log(`Fetching streak data for user ${userId} from ${startDate} to ${endDate}`)
-
     // Query daily_logs to get days with activities, using distinct on log_date
-    const { data, error } = await serviceClient
+    // Add timeout to prevent long-running queries
+    const queryPromise = serviceClient
       .from("daily_logs")
       .select("log_date")
       .eq("user_id", userId)
       .gte("log_date", startDate)
       .lte("log_date", endDate)
+      .limit(50) // Add limit to prevent excessive data fetching
+
+    // Add timeout to the query
+    const { data, error } = (await Promise.race([
+      queryPromise,
+      new Promise((_, reject) => setTimeout(() => reject(new Error("Query timed out")), 5000)),
+    ])) as any
 
     if (error) {
       console.error("Error fetching weekly streak data:", error)
@@ -58,16 +64,21 @@ export async function getWeeklyStreakData(userId: string) {
       })
     }
 
-    // Get the current streak from the user profile
-    const { data: userData, error: userError } = await serviceClient
-      .from("users")
-      .select("current_streak")
-      .eq("id", userId)
-      .single()
+    // Get the current streak from the user profile with timeout
+    const userQueryPromise = serviceClient.from("users").select("current_streak").eq("id", userId).single()
+
+    // Add timeout to the user query
+    const { data: userData, error: userError } = (await Promise.race([
+      userQueryPromise,
+      new Promise((_, reject) => setTimeout(() => reject(new Error("User query timed out")), 5000)),
+    ])) as any
 
     if (userError) {
       console.error("Error fetching user streak:", userError)
-      throw userError
+      return {
+        weekDays,
+        currentStreak: 0,
+      }
     }
 
     return {

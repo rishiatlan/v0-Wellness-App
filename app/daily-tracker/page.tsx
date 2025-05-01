@@ -296,38 +296,28 @@ export default function DailyTracker() {
       const userLocalDate = getUserLocalDate()
       setLocalDate(userLocalDate)
 
-      // Use individual try/catch blocks for each request to handle partial failures
-      let profileData, activitiesData, logsData
-
-      try {
-        profileData = await getUserProfileClientSafe(user.id)
-      } catch (profileError) {
-        console.error("Error fetching user profile:", profileError)
-        profileData = {
-          id: user.id,
-          email: user.email || "user@example.com",
-          full_name: user.user_metadata?.full_name || "New User",
-          total_points: 0,
-          current_tier: 0,
-          current_streak: 0,
-        }
-      }
-
-      try {
-        activitiesData = await getActivitiesClientSafe()
-      } catch (activitiesError) {
-        console.error("Error fetching activities:", activitiesError)
-        activitiesData = []
-      }
-
-      try {
-        // Use the server action directly for more reliable data
-        const { getDailyLogs } = await import("@/app/actions/activity-actions")
-        logsData = await getDailyLogs(user.id, userLocalDate)
-      } catch (logsError) {
-        console.error("Error fetching daily logs:", logsError)
-        logsData = []
-      }
+      // Fetch data in parallel instead of sequentially
+      const [profileData, activitiesData, logsData] = await Promise.all([
+        getUserProfileClientSafe(user.id).catch((error) => {
+          console.error("Error fetching user profile:", error)
+          return {
+            id: user.id,
+            email: user.email || "user@example.com",
+            full_name: user.user_metadata?.full_name || "New User",
+            total_points: 0,
+            current_tier: 0,
+            current_streak: 0,
+          }
+        }),
+        getActivitiesClientSafe().catch((error) => {
+          console.error("Error fetching activities:", error)
+          return []
+        }),
+        getDailyLogsClientSafe(user.id, userLocalDate).catch((error) => {
+          console.error("Error fetching daily logs:", error)
+          return []
+        }),
+      ])
 
       setUserProfile(profileData)
 
@@ -398,14 +388,32 @@ export default function DailyTracker() {
 
   // Initial data fetch
   useEffect(() => {
-    fetchActivitiesAndLogs()
-    fetchWeeklyStreakData()
+    let isMounted = true
+
+    const fetchData = async () => {
+      await fetchActivitiesAndLogs()
+      if (isMounted) {
+        await fetchWeeklyStreakData()
+      }
+    }
+
+    fetchData()
+
+    return () => {
+      isMounted = false
+    }
   }, [fetchActivitiesAndLogs, fetchWeeklyStreakData])
 
   // Create default activities if none exist
   useEffect(() => {
-    if (!loading && activities.length === 0 && user) {
+    let isMounted = true
+
+    if (!loading && activities.length === 0 && user && isMounted) {
       createDefaultActivities()
+    }
+
+    return () => {
+      isMounted = false
     }
   }, [loading, activities, user, createDefaultActivities])
 
@@ -463,175 +471,136 @@ export default function DailyTracker() {
   }, [user])
 
   // Add a debounced version of the toggle function
-  const debouncedToggleActivity = useCallback(
-    debounce(async (activity, originalActivity) => {
-      setSavingActivity(activity.id)
-      setActivityError(null)
-      setShowRLSHelp(false)
-      setShowFKHelp(false)
+  const handleToggleActivity = async (activity: Activity) => {
+    if (!user) return
 
-      // Log the activity being processed
-      console.log(`Processing activity in debounced function: ${activity.name} (${activity.id})`)
+    // Prevent toggling if already saving
+    if (savingActivity) {
+      console.log("Already saving an activity, please wait...")
+      return
+    }
 
-      // Move the actual API call here
-      try {
-        // Only allow logging activities, not unlogging
-        // We know we're only logging (not unlogging) because we prevent toggling completed activities
-        const { logActivity } = await import("@/app/actions/activity-actions")
-        const result = await logActivity(
-          user.id,
-          activity.id,
-          localDate,
-          activity.points,
-          user.email || "",
-          user.user_metadata?.full_name || "",
-        )
+    // Find the original activity in the activities array
+    const originalActivity = activities.find((a) => a.id === activity.id)
 
-        if (!result.success) {
-          throw new Error(result.error || "Failed to log activity")
-        }
+    if (!originalActivity) {
+      console.error("Original activity not found")
+      return
+    }
 
-        // Show confetti when completing an activity
-        confetti({
-          particleCount: 100,
-          spread: 70,
-          origin: { y: 0.6 },
-        })
+    // If the activity is already completed, don't allow toggling it off
+    if (originalActivity.completed) {
+      console.log("Activity already completed, cannot toggle off")
+      return
+    }
 
+    // Set the saving state immediately to prevent double-clicks
+    setSavingActivity(activity.id)
+
+    try {
+      // Check if this activity has already been logged today
+      const alreadyLogged = await checkActivityAlreadyLoggedClientSafe(user.id, activity.id, localDate)
+
+      if (alreadyLogged) {
         toast({
-          title: `${activity.emoji} ${activity.name} completed!`,
-          description: `You earned ${activity.points} points`,
+          title: "Already Logged",
+          description: "This activity has already been logged today",
+          variant: "destructive",
         })
-
-        // Update streak when completing an activity
-        updateUserStreakClientSafe(user.id).catch((err) => {
-          console.error("Error updating streak:", err)
-        })
-
-        // Refresh user profile to get updated points
-        try {
-          const profileData = await getUserProfileClientSafe(user.id)
-          setUserProfile(profileData)
-
-          // Refresh history if we're on the history tab
-          if (activeTab === "history") {
-            fetchActivityHistory()
-          }
-
-          // Fetch today's points directly from the database to ensure accuracy
-          const pointsResult = await getTodayPointsClientSafe(user.id, localDate)
-          if (pointsResult.success) {
-            setTodayPoints(pointsResult.points)
-            console.log(`Today's points updated from database: ${pointsResult.points}`)
-          }
-
-          // Force a UI update for the progress bar
-          setActivities((prevActivities) => {
-            // Make sure the activity state is correct
-            const updatedActivities = prevActivities.map((a) => {
-              if (a.id === activity.id) {
-                return { ...a, completed: true }
-              }
-              return a
-            })
-
-            // Recalculate points from the updated activities
-            const newPoints = updatedActivities.reduce((sum, act) => {
-              return sum + (act.completed ? act.points : 0)
-            }, 0)
-
-            console.log(`Recalculated points after toggle: ${newPoints}`)
-            setTodayPoints(newPoints)
-
-            return updatedActivities
-          })
-        } catch (profileError: any) {
-          console.error("Error refreshing profile:", profileError)
-        }
-
-        // Recalculate points
-        await recalculatePoints()
-
-        // Force another UI update after all operations are complete
-        setActivities((prevActivities) => {
-          const updatedActivities = [...prevActivities]
-          // Recalculate points again to be sure
-          const finalPoints = updatedActivities.reduce((sum, act) => {
-            return sum + (act.completed ? act.points : 0)
-          }, 0)
-          console.log(`Final points calculation: ${finalPoints}`)
-          setTodayPoints(finalPoints)
-          return updatedActivities
-        })
-
-        // Recalculate streak when completing an activity
-        try {
-          const streakResult = await recalculateUserStreakClientSafe(user.id)
-          if (streakResult.success) {
-            console.log(`Streak recalculated: ${streakResult.streak} days`)
-          }
-        } catch (streakError) {
-          console.error("Error recalculating streak:", streakError)
-        }
-
-        // Refresh streak data
-        fetchWeeklyStreakData()
-      } catch (error: any) {
-        console.error("Error logging activity:", error)
-
-        // Revert the UI change if there was an error
-        setActivities((prevActivities) => {
-          return prevActivities.map((a) => {
-            if (a.id === activity.id) {
-              return originalActivity // Restore original activity state
-            }
-            return a
-          })
-        })
-
-        // Recalculate today's points after reverting
-        calculateTodayPoints(activities)
-
-        // Check if it's a duplicate entry error (RLS policy violation)
-        if (error.message.includes("row-level security policy")) {
-          setShowRLSHelp(true)
-          setActivityError("You have already logged this activity for today.")
-          toast({
-            title: "Already logged",
-            description: "You have already logged this activity for today.",
-            variant: "default",
-          })
-        }
-        // Check if it's a foreign key error
-        else if (error.message.includes("foreign key constraint")) {
-          setShowFKHelp(true)
-          setActivityError("Your profile is being set up. Please refresh the page to continue.")
-
-          // Try to refresh the page to create the user profile
-          window.location.reload()
-        }
-        // Check if it's an auth session error
-        else if (error.message.includes("Auth session missing")) {
-          setActivityError("Your session has expired. Please refresh the page or sign in again to continue.")
-        } else {
-          setActivityError("We couldn't update your activity. Please try again in a moment.")
-        }
-      } finally {
         setSavingActivity(null)
+        return
       }
-    }, 300),
-    [
-      user,
-      localDate,
-      toast,
-      calculateTodayPoints,
-      fetchTodayPoints,
-      fetchActivityHistory,
-      recalculatePoints,
-      fetchWeeklyStreakData,
-      activities,
-    ],
-  )
+
+      // Optimistically update the UI
+      setActivities((prevActivities) => {
+        return prevActivities.map((a) => {
+          if (a.id === activity.id) {
+            return { ...a, completed: true }
+          }
+          return a
+        })
+      })
+
+      // Update today's points optimistically
+      setTodayPoints((prev) => prev + activity.points)
+
+      // Call the server action directly for more reliable logging
+      const { logActivity } = await import("@/app/actions/activity-actions")
+      const result = await logActivity(
+        user.id,
+        activity.id,
+        localDate,
+        activity.points,
+        user.email || "",
+        user.user_metadata?.full_name || "",
+      )
+
+      if (!result.success) {
+        throw new Error(result.error || "Failed to log activity")
+      }
+
+      // Show confetti when completing an activity
+      confetti({
+        particleCount: 100,
+        spread: 70,
+        origin: { y: 0.6 },
+      })
+
+      toast({
+        title: `${activity.emoji} ${activity.name} completed!`,
+        description: `You earned ${activity.points} points`,
+      })
+
+      // Update data in the background without blocking UI
+      Promise.all([
+        updateUserStreakClientSafe(user.id),
+        getUserProfileClientSafe(user.id).then(setUserProfile),
+        activeTab === "history" ? fetchActivityHistory() : Promise.resolve(),
+        recalculateUserStreakClientSafe(user.id),
+        fetchWeeklyStreakData(),
+      ]).catch((err) => {
+        console.error("Error updating data after activity completion:", err)
+      })
+    } catch (error: any) {
+      console.error("Error logging activity:", error)
+
+      // Revert the UI change if there was an error
+      setActivities((prevActivities) => {
+        return prevActivities.map((a) => {
+          if (a.id === activity.id) {
+            return originalActivity // Restore original activity state
+          }
+          return a
+        })
+      })
+
+      // Revert points
+      setTodayPoints((prev) => prev - activity.points)
+
+      // Show appropriate error message
+      if (error.message.includes("row-level security policy")) {
+        setShowRLSHelp(true)
+        setActivityError("You have already logged this activity for today.")
+        toast({
+          title: "Already logged",
+          description: "You have already logged this activity for today.",
+          variant: "default",
+        })
+      } else if (error.message.includes("foreign key constraint")) {
+        setShowFKHelp(true)
+        setActivityError("Your profile is being set up. Please refresh the page to continue.")
+      } else {
+        setActivityError("We couldn't update your activity. Please try again in a moment.")
+        toast({
+          title: "Error",
+          description: "Failed to log activity. Please try again.",
+          variant: "destructive",
+        })
+      }
+    } finally {
+      setSavingActivity(null)
+    }
+  }
 
   // Function to handle tab changes
   const handleTabChange = (value: string) => {
@@ -717,181 +686,19 @@ export default function DailyTracker() {
   }
 
   // Function to toggle activity completion status
-  const handleToggleActivity = async (activity: Activity) => {
-    const handleRetry = () => {
-      window.location.reload()
-    }
-
-    if (!user) return
-
-    // Prevent toggling if already saving
-    if (savingActivity) {
-      console.log("Already saving an activity, please wait...")
-      return
-    }
-
-    // Find the original activity in the activities array
-    const originalActivity = activities.find((a) => a.id === activity.id)
-
-    if (!originalActivity) {
-      console.error("Original activity not found")
-      return
-    }
-
-    // If the activity is already completed, don't allow toggling it off
-    if (originalActivity.completed) {
-      console.log("Activity already completed, cannot toggle off")
-      return
-    }
-
-    // Set the saving state immediately to prevent double-clicks
-    setSavingActivity(activity.id)
-
-    try {
-      // Check if this activity has already been logged today
-      const alreadyLogged = await checkActivityAlreadyLoggedClientSafe(user.id, activity.id, localDate)
-
-      if (alreadyLogged) {
-        toast({
-          title: "Already Logged",
-          description: "This activity has already been logged today",
-          variant: "destructive",
-        })
-        setSavingActivity(null)
-        return
-      }
-
-      // Optimistically update the UI
-      setActivities((prevActivities) => {
-        const updatedActivities = prevActivities.map((a) => {
-          if (a.id === activity.id) {
-            return { ...a, completed: true }
-          }
-          return a
-        })
-
-        // Recalculate today's points with the updated activities
-        const newPoints = updatedActivities.reduce((sum, act) => {
-          return sum + (act.completed ? act.points : 0)
-        }, 0)
-
-        console.log(`Recalculated points after toggle: ${newPoints}`)
-        setTodayPoints(newPoints)
-
-        return updatedActivities
-      })
-
-      // Call the server action directly for more reliable logging
-      const { logActivity } = await import("@/app/actions/activity-actions")
-      const result = await logActivity(
-        user.id,
-        activity.id,
-        localDate,
-        activity.points,
-        user.email || "",
-        user.user_metadata?.full_name || "",
-      )
-
-      if (!result.success) {
-        throw new Error(result.error || "Failed to log activity")
-      }
-
-      // Show confetti when completing an activity
-      confetti({
-        particleCount: 100,
-        spread: 70,
-        origin: { y: 0.6 },
-      })
-
-      toast({
-        title: `${activity.emoji} ${activity.name} completed!`,
-        description: `You earned ${activity.points} points`,
-      })
-
-      // Update streak when completing an activity
-      updateUserStreakClientSafe(user.id).catch((err) => {
-        console.error("Error updating streak:", err)
-      })
-
-      // Refresh user profile to get updated points
-      try {
-        const profileData = await getUserProfileClientSafe(user.id)
-        setUserProfile(profileData)
-
-        // Refresh history if we're on the history tab
-        if (activeTab === "history") {
-          fetchActivityHistory()
+  // Add this at the top of the component
+  useEffect(() => {
+    if (loading) {
+      const timeout = setTimeout(() => {
+        if (loading) {
+          setLoading(false)
+          setError("Loading timed out. Please refresh the page.")
         }
+      }, 15000) // 15 seconds timeout
 
-        // Fetch today's points directly from the database to ensure accuracy
-        const pointsResult = await getTodayPointsClientSafe(user.id, localDate)
-        if (pointsResult.success) {
-          setTodayPoints(pointsResult.points)
-          console.log(`Today's points updated from database: ${pointsResult.points}`)
-        }
-
-        // Recalculate streak when completing an activity
-        try {
-          const streakResult = await recalculateUserStreakClientSafe(user.id)
-          if (streakResult.success) {
-            console.log(`Streak recalculated: ${streakResult.streak} days`)
-          }
-        } catch (streakError) {
-          console.error("Error recalculating streak:", streakError)
-        }
-
-        // Refresh streak data
-        fetchWeeklyStreakData()
-      } catch (error) {
-        console.error("Error refreshing data after activity completion:", error)
-      }
-    } catch (error: any) {
-      console.error("Error logging activity:", error)
-
-      // Revert the UI change if there was an error
-      setActivities((prevActivities) => {
-        const revertedActivities = prevActivities.map((a) => {
-          if (a.id === activity.id) {
-            return originalActivity // Restore original activity state
-          }
-          return a
-        })
-
-        // Recalculate today's points after reverting
-        const revertedPoints = revertedActivities.reduce((sum, act) => {
-          return sum + (act.completed ? act.points : 0)
-        }, 0)
-
-        console.log(`Reverted points calculation: ${revertedPoints}`)
-        setTodayPoints(revertedPoints)
-
-        return revertedActivities
-      })
-
-      // Show appropriate error message
-      if (error.message.includes("row-level security policy")) {
-        setShowRLSHelp(true)
-        setActivityError("You have already logged this activity for today.")
-        toast({
-          title: "Already logged",
-          description: "You have already logged this activity for today.",
-          variant: "default",
-        })
-      } else if (error.message.includes("foreign key constraint")) {
-        setShowFKHelp(true)
-        setActivityError("Your profile is being set up. Please refresh the page to continue.")
-      } else {
-        setActivityError("We couldn't update your activity. Please try again in a moment.")
-        toast({
-          title: "Error",
-          description: "Failed to log activity. Please try again.",
-          variant: "destructive",
-        })
-      }
-    } finally {
-      setSavingActivity(null)
+      return () => clearTimeout(timeout)
     }
-  }
+  }, [loading])
 
   if (loading) {
     return (
