@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useCallback } from "react"
+import { useEffect, useState, useCallback, useRef } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Progress } from "@/components/ui/progress"
@@ -79,6 +79,11 @@ export default function DailyTracker() {
   const [todayPoints, setTodayPoints] = useState(0)
   const [refreshing, setRefreshing] = useState(false)
   const [creatingDefaultActivities, setCreatingDefaultActivities] = useState(false)
+  const [dataFetchAttempted, setDataFetchAttempted] = useState(false) // Add this state to track fetch attempts
+  const [retryCount, setRetryCount] = useState(0) // Track retry attempts
+  const maxRetries = 3 // Maximum number of retry attempts
+  const fetchTimeoutRef = useRef<NodeJS.Timeout | null>(null) // Reference to store timeout ID
+  const initialLoadTimeoutRef = useRef<NodeJS.Timeout | null>(null) // Reference for initial load timeout
 
   // Add this state and function to the component
   const [weeklyStreak, setWeeklyStreak] = useState<any>({
@@ -165,8 +170,6 @@ export default function DailyTracker() {
       })
     }
   }
-
-  // Fix the calculateTodayPoints function to ensure it correctly updates the total points
 
   // Function to calculate today's points directly from completed activities
   const calculateTodayPoints = useCallback((activityList: Activity[]) => {
@@ -284,7 +287,7 @@ export default function DailyTracker() {
     }
   }, [user, toast, calculateTodayPoints])
 
-  // Function to fetch activities and logs
+  // Function to fetch activities and logs with retry logic
   const fetchActivitiesAndLogs = useCallback(async () => {
     if (!user) return
 
@@ -346,6 +349,9 @@ export default function DailyTracker() {
         setActivities(activitiesWithCompletionStatus)
         calculateTodayPoints(activitiesWithCompletionStatus)
       }
+
+      // Reset retry count on successful fetch
+      setRetryCount(0)
     } catch (error: any) {
       console.error("Error fetching data:", error)
       // Don't set error for new users, we'll handle this case
@@ -355,12 +361,37 @@ export default function DailyTracker() {
         // Don't show error to user, just log it and continue with empty data
         console.error("Error in fetchActivitiesAndLogs:", error)
         setActivities([])
+
+        // Implement retry logic
+        if (retryCount < maxRetries) {
+          console.log(`Retrying data fetch (attempt ${retryCount + 1} of ${maxRetries})...`)
+          setRetryCount((prev) => prev + 1)
+
+          // Clear any existing timeout
+          if (fetchTimeoutRef.current) {
+            clearTimeout(fetchTimeoutRef.current)
+          }
+
+          // Set a new timeout for retry with exponential backoff
+          fetchTimeoutRef.current = setTimeout(() => {
+            fetchActivitiesAndLogs()
+          }, 1000 * Math.pow(2, retryCount)) // Exponential backoff: 1s, 2s, 4s
+
+          return // Exit early to prevent setting loading to false
+        }
       }
     } finally {
       setLoading(false)
       setRefreshing(false)
+      setDataFetchAttempted(true) // Mark that we've attempted to fetch data
+
+      // Clear the timeout reference
+      if (fetchTimeoutRef.current) {
+        clearTimeout(fetchTimeoutRef.current)
+        fetchTimeoutRef.current = null
+      }
     }
-  }, [user, calculateTodayPoints])
+  }, [user, calculateTodayPoints, retryCount])
 
   // Update time until reset
   const updateTimeUntilReset = useCallback(() => {
@@ -396,18 +427,42 @@ export default function DailyTracker() {
     }
   }, [fetchActivitiesAndLogs, updateTimeUntilReset])
 
-  // Initial data fetch
+  // Initial data fetch with improved timeout handling
   useEffect(() => {
-    fetchActivitiesAndLogs()
-    fetchWeeklyStreakData()
-  }, [fetchActivitiesAndLogs, fetchWeeklyStreakData])
+    // Only fetch if we have a user
+    if (user) {
+      fetchActivitiesAndLogs()
+      fetchWeeklyStreakData()
+
+      // Set a longer timeout (30 seconds) for initial load
+      initialLoadTimeoutRef.current = setTimeout(() => {
+        if (loading && !dataFetchAttempted) {
+          setLoading(false)
+          setError("Loading timed out. Please try again by clicking the refresh button below.")
+        }
+      }, 30000) // 30 seconds timeout - increased from 10 seconds
+    } else {
+      // If no user, stop loading state
+      setLoading(false)
+    }
+
+    return () => {
+      // Clean up timeouts on unmount
+      if (initialLoadTimeoutRef.current) {
+        clearTimeout(initialLoadTimeoutRef.current)
+      }
+      if (fetchTimeoutRef.current) {
+        clearTimeout(fetchTimeoutRef.current)
+      }
+    }
+  }, [fetchActivitiesAndLogs, fetchWeeklyStreakData, user, loading, dataFetchAttempted])
 
   // Create default activities if none exist
   useEffect(() => {
-    if (!loading && activities.length === 0 && user) {
+    if (!loading && activities.length === 0 && user && dataFetchAttempted) {
       createDefaultActivities()
     }
-  }, [loading, activities, user, createDefaultActivities])
+  }, [loading, activities, user, createDefaultActivities, dataFetchAttempted])
 
   // Update the useEffect hook that updates today's points whenever activities change
   useEffect(() => {
@@ -646,6 +701,7 @@ export default function DailyTracker() {
     if (!user) return
 
     setRefreshing(true)
+    setError(null) // Clear any existing errors
 
     try {
       // Recalculate user points
@@ -875,7 +931,7 @@ export default function DailyTracker() {
         toast({
           title: "Already logged",
           description: "You have already logged this activity for today.",
-          variant: "default",
+          variant: "destructive",
         })
       } else if (error.message.includes("foreign key constraint")) {
         setShowFKHelp(true)
@@ -895,8 +951,9 @@ export default function DailyTracker() {
 
   if (loading) {
     return (
-      <div className="container flex h-[calc(100vh-200px)] items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="container flex h-[calc(100vh-200px)] items-center justify-center flex-col">
+        <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
+        <p className="text-muted-foreground">Loading your activities...</p>
       </div>
     )
   }
@@ -908,8 +965,20 @@ export default function DailyTracker() {
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>{error}</AlertDescription>
         </Alert>
-        <div className="text-center">
-          <Button onClick={() => window.location.reload()}>Retry</Button>
+        <div className="text-center mt-4">
+          <Button onClick={handleRefresh} disabled={refreshing}>
+            {refreshing ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Refreshing...
+              </>
+            ) : (
+              <>
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Refresh Data
+              </>
+            )}
+          </Button>
         </div>
       </div>
     )
@@ -925,7 +994,7 @@ export default function DailyTracker() {
           </CardHeader>
           <CardContent>
             <Button asChild>
-              <a href="/auth/login">Sign In</a>
+              <a href="/auth/login?callbackUrl=/daily-tracker">Sign In</a>
             </Button>
           </CardContent>
         </Card>

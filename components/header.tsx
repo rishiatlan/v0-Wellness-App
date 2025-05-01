@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { Menu, LogOut, User, Shield } from "lucide-react"
@@ -19,7 +19,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import { isAdmin } from "@/lib/admin-utils"
 
 const getNavigation = (userEmail) => {
@@ -41,8 +41,15 @@ const getNavigation = (userEmail) => {
 
 export default function Header() {
   const pathname = usePathname()
+  const router = useRouter()
   const isMobile = useMobile()
   const { user, loading, refreshSession } = useAuth()
+  const [isClient, setIsClient] = useState(false)
+
+  // Set isClient to true when component mounts
+  useEffect(() => {
+    setIsClient(true)
+  }, [])
 
   // Refresh session when header mounts to ensure we have the latest auth state
   useEffect(() => {
@@ -102,7 +109,7 @@ export default function Header() {
           </Link>
         </div>
 
-        {isMobile ? (
+        {isClient && isMobile ? (
           <Sheet>
             <SheetTrigger asChild>
               <Button variant="outline" size="icon" className="border-navy-700 bg-navy-900 hover:bg-navy-800">
@@ -151,7 +158,7 @@ export default function Header() {
                       asChild
                       className="w-full bg-gradient-to-r from-teal-500 to-blue-500 hover:from-teal-600 hover:to-blue-600"
                     >
-                      <Link href="/auth/login">Sign In</Link>
+                      <Link href={`/auth/login?callbackUrl=${encodeURIComponent(pathname || "/")}`}>Sign In</Link>
                     </Button>
                   )}
                 </div>
@@ -172,7 +179,7 @@ export default function Header() {
                 {item.name}
               </Link>
             ))}
-            {!isMobile && user?.email && isAdmin(user.email) && (
+            {isClient && !isMobile && user?.email && isAdmin(user.email) && (
               <Button
                 variant="outline"
                 size="sm"
@@ -189,7 +196,7 @@ export default function Header() {
         )}
 
         <div className="flex items-center gap-2">
-          {!loading && (
+          {isClient && !loading && (
             <>
               {user ? (
                 <DropdownMenu>
@@ -225,7 +232,7 @@ export default function Header() {
                   asChild
                   className="bg-gradient-to-r from-teal-500 to-blue-500 hover:from-teal-600 hover:to-blue-600"
                 >
-                  <Link href="/auth/login">Log In</Link>
+                  <Link href={`/auth/login?callbackUrl=${encodeURIComponent(pathname || "/")}`}>Log In</Link>
                 </Button>
               )}
             </>

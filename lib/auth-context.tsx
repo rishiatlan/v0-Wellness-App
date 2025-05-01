@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { createContext, useContext, useEffect, useState, useCallback } from "react"
+import { createContext, useContext, useEffect, useState, useCallback, useMemo } from "react"
 import type { Session, User } from "@supabase/supabase-js"
 import { supabase } from "./supabase"
 import { isAtlanEmail } from "./is-atlan-email"
@@ -31,9 +31,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
+  const [authInitialized, setAuthInitialized] = useState(false)
 
   // This will prevent unnecessary error messages during normal authentication flows
-  const clearAuthErrors = () => {
+  const clearAuthErrors = useCallback(() => {
     // Clear any URL parameters that might cause error messages
     if (typeof window !== "undefined") {
       const url = new URL(window.location.href)
@@ -42,7 +43,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         window.history.replaceState({}, "", url.toString())
       }
     }
-  }
+  }, [])
 
   // Function to refresh the session - memoized with useCallback
   const refreshSession = useCallback(async () => {
@@ -75,6 +76,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
+  // Get initial session - only run once
   useEffect(() => {
     // Clear any authentication error parameters that might be in the URL
     clearAuthErrors()
@@ -83,6 +85,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const getInitialSession = async () => {
       console.log("Getting initial session")
       try {
+        setLoading(true)
         const { data, error } = await supabase.auth.getSession()
 
         if (error) {
@@ -105,10 +108,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setError(e)
       } finally {
         setLoading(false)
+        setAuthInitialized(true)
       }
     }
 
     getInitialSession()
+  }, [clearAuthErrors])
+
+  // Set up auth state change listener
+  useEffect(() => {
+    if (!authInitialized) return
 
     // Listen for auth changes
     const {
@@ -137,11 +146,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       subscription.unsubscribe()
     }
-  }, [])
+  }, [authInitialized])
 
-  return (
-    <AuthContext.Provider value={{ user, session, loading, error, isAtlanEmail, refreshSession }}>
-      {children}
-    </AuthContext.Provider>
+  // Memoize the context value to prevent unnecessary re-renders
+  const contextValue = useMemo(
+    () => ({
+      user,
+      session,
+      loading,
+      error,
+      isAtlanEmail,
+      refreshSession,
+    }),
+    [user, session, loading, error, refreshSession],
   )
+
+  return <AuthContext.Provider value={contextValue}>{children}</AuthContext.Provider>
 }

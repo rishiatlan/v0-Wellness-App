@@ -18,6 +18,9 @@ export default async function Login({
   // Since createClient is now async, we need to await it
   const supabase = await createClient(cookieStore)
 
+  // Default callback URL to daily-tracker if not specified
+  const callbackUrl = searchParams?.callbackUrl || "/daily-tracker"
+
   // Wrap this in a try/catch to handle potential errors
   try {
     const {
@@ -26,7 +29,7 @@ export default async function Login({
 
     // If the user is already logged in, redirect them
     if (session) {
-      return redirect(searchParams.callbackUrl || "/")
+      return redirect(callbackUrl)
     }
   } catch (error) {
     console.error("Error getting session:", error)
@@ -39,6 +42,7 @@ export default async function Login({
     const email = formData.get("email") as string
     const password = formData.get("password") as string
     const cookieStore = cookies()
+    const redirectUrl = (formData.get("callbackUrl") as string) || "/daily-tracker"
 
     try {
       // Since createClient is now async, we need to await it
@@ -64,7 +68,7 @@ export default async function Login({
         }
 
         return redirect(
-          `/auth/login?message=${encodeURIComponent(errorMessage)}${searchParams.callbackUrl ? `&callbackUrl=${encodeURIComponent(searchParams.callbackUrl)}` : ""}`,
+          `/auth/login?message=${encodeURIComponent(errorMessage)}&callbackUrl=${encodeURIComponent(redirectUrl)}`,
         )
       }
 
@@ -72,16 +76,16 @@ export default async function Login({
       if (!data.session) {
         console.error("No session created after successful authentication")
         return redirect(
-          `/auth/login?message=${encodeURIComponent("Authentication succeeded but session creation failed. Please try again.")}${searchParams.callbackUrl ? `&callbackUrl=${encodeURIComponent(searchParams.callbackUrl)}` : ""}`,
+          `/auth/login?message=${encodeURIComponent("Authentication succeeded but session creation failed. Please try again.")}&callbackUrl=${encodeURIComponent(redirectUrl)}`,
         )
       }
 
-      console.log("User authenticated successfully, redirecting...")
-      return redirect(searchParams.callbackUrl || "/")
+      console.log("User authenticated successfully, redirecting to:", redirectUrl)
+      return redirect(redirectUrl)
     } catch (error: any) {
       console.error("Unexpected error during sign in:", error)
       return redirect(
-        `/auth/login?message=${encodeURIComponent("An unexpected error occurred. Please try again later.")}${searchParams.callbackUrl ? `&callbackUrl=${encodeURIComponent(searchParams.callbackUrl)}` : ""}`,
+        `/auth/login?message=${encodeURIComponent("An unexpected error occurred. Please try again later.")}&callbackUrl=${encodeURIComponent(redirectUrl)}`,
       )
     }
   }
@@ -145,6 +149,8 @@ export default async function Login({
                   className="border-navy-700 bg-navy-800 text-white placeholder:text-gray-500 focus:border-primary focus:ring-primary"
                 />
               </div>
+              {/* Hidden input to pass the callback URL */}
+              <input type="hidden" name="callbackUrl" value={callbackUrl} />
             </CardContent>
             <CardFooter className="flex flex-col space-y-4">
               <Button
@@ -155,7 +161,10 @@ export default async function Login({
               </Button>
               <div className="text-center text-sm text-gray-400">
                 Don&apos;t have an account?{" "}
-                <Link href="/auth/register" className="text-primary hover:underline">
+                <Link
+                  href={`/auth/register?callbackUrl=${encodeURIComponent(callbackUrl)}`}
+                  className="text-primary hover:underline"
+                >
                   Sign up
                 </Link>
               </div>

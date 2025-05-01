@@ -7,6 +7,9 @@ import {
   getUserProfileClient,
   updateUserStreakClient,
 } from "@/lib/api-client"
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
+
+const supabase = createClientComponentClient()
 
 // Utility function for conditional logging
 const logDebug = (message: string, data?: any) => {
@@ -169,5 +172,27 @@ export async function getWeeklyStreakDataClientSafe(userId: string) {
         })),
       currentStreak: 0,
     }
+  }
+}
+
+/**
+ * Checks if the user is authenticated and redirects to login if not
+ */
+export async function checkAuthAndRedirect() {
+  try {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+    if (!session) {
+      // Redirect to login with callback to daily-tracker
+      window.location.href = `/auth/login?callbackUrl=${encodeURIComponent("/daily-tracker")}`
+      return false
+    }
+    return true
+  } catch (error) {
+    console.error("Error checking authentication:", error)
+    // Redirect to login with callback to daily-tracker
+    window.location.href = `/auth/login?callbackUrl=${encodeURIComponent("/daily-tracker")}`
+    return false
   }
 }

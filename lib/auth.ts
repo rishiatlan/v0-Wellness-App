@@ -76,22 +76,18 @@ export async function signIn(email: string, password: string) {
 // Sign out
 export async function signOut() {
   try {
-    console.log("Signing out user")
-    const { error } = await supabase.auth.signOut({
-      scope: "local", // Only sign out from this device
-    })
-
+    const { error } = await supabase.auth.signOut()
     if (error) {
       console.error("Error signing out:", error)
       throw error
     }
 
-    // Authentication complete
-    // Force reload to clear any cached state
-    window.location.href = "/auth/login"
-  } catch (error: any) {
-    console.error("Exception in signOut:", error)
-    throw new Error(error.message)
+    // Redirect to home page after sign out
+    window.location.href = "/"
+    return { success: true }
+  } catch (error) {
+    console.error("Exception during sign out:", error)
+    return { success: false, error }
   }
 }
 
@@ -163,5 +159,19 @@ export async function getUserProfileClientSafe(userId: string) {
   } catch (error: any) {
     console.error("Exception in getUserProfile:", error)
     throw new Error(error.message)
+  }
+}
+
+export async function isAuthenticated() {
+  try {
+    const { data, error } = await supabase.auth.getSession()
+    if (error) {
+      console.error("Error checking authentication:", error)
+      return false
+    }
+    return !!data.session
+  } catch (error) {
+    console.error("Exception checking authentication:", error)
+    return false
   }
 }

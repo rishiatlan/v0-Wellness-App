@@ -6,6 +6,7 @@ import { AuthProvider } from "@/lib/auth-context"
 import { Toaster } from "@/components/ui/toaster"
 import { PreLaunchBanner } from "@/components/pre-launch-banner"
 import { getChallengeStatus } from "@/app/actions/challenge-actions"
+import Header from "@/components/header" // Make sure to import the Header component
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -30,6 +31,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             <div className="min-h-screen flex flex-col">
               {/* Show pre-launch banner if challenge hasn't started */}
               <PreLaunchBanner launchDate={launchDate} isChallengeLive={started} />
+
+              {/* Always include the Header component */}
+              <Header />
 
               {children}
             </div>
