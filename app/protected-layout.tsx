@@ -1,19 +1,23 @@
 "use client"
 
 import type React from "react"
-
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import { useRouter, usePathname } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
 import { Loader2 } from "lucide-react"
+
+// Cache authentication results to prevent unnecessary checks
+const authCache = new Map<string, boolean>()
 
 export default function ProtectedLayout({ children }: { children: React.ReactNode }) {
   const { user, session, loading } = useAuth()
   const router = useRouter()
   const pathname = usePathname()
   const [isChecking, setIsChecking] = useState(true)
+  const [redirecting, setRedirecting] = useState(false)
 
-  useEffect(() => {
+  // Memoized function to check if a route is public
+  const isPublicRoute = useCallback((path: string) => {
     // Public routes that don't require authentication
     const publicRoutes = [
       "/",
@@ -27,10 +31,22 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
       "/contact",
     ]
 
-    const isPublicRoute = publicRoutes.some((route) => pathname === route || pathname.startsWith(route + "/"))
+    return publicRoutes.some((route) => path === route || path.startsWith(route + "/"))
+  }, [])
+
+  useEffect(() => {
+    // Check if we've already verified this path
+    if (authCache.has(pathname)) {
+      const isAuthenticated = authCache.get(pathname)
+      if (isAuthenticated) {
+        setIsChecking(false)
+        return
+      }
+    }
 
     // If it's a public route, no need to check authentication
-    if (isPublicRoute) {
+    if (isPublicRoute(pathname)) {
+      authCache.set(pathname, true)
       setIsChecking(false)
       return
     }
@@ -43,12 +59,33 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
     // If not a public route and no user is logged in, redirect to login
     if (!user && !session) {
       console.log("No authenticated user, redirecting to login from:", pathname)
-      router.push(`/auth/login?callbackUrl=${encodeURIComponent(pathname)}`)
+      setRedirecting(true)
+      authCache.set(pathname, false)
+
+      // Use a timeout to ensure state updates before navigation
+      const timer = setTimeout(() => {
+        router.push(`/auth/login?callbackUrl=${encodeURIComponent(pathname)}`)
+      }, 100)
+
+      return () => clearTimeout(timer)
     } else {
       // User is authenticated, allow access
+      authCache.set(pathname, true)
       setIsChecking(false)
     }
-  }, [user, session, loading, pathname, router])
+  }, [user, session, loading, pathname, router, isPublicRoute])
+
+  // Show loading state while checking authentication
+  if (redirecting) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center">
+        <div className="flex flex-col items-center gap-2">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p>Redirecting to login...</p>
+        </div>
+      </div>
+    )
+  }
 
   // Show loading state while checking authentication
   if (isChecking && !loading) {

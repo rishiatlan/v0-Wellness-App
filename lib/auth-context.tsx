@@ -1,169 +1,102 @@
 "use client"
 
 import type React from "react"
-import { createContext, useContext, useEffect, useState, useCallback, useMemo } from "react"
+import { createContext, useContext, useEffect, useState, useMemo, useCallback } from "react"
 import type { Session, User } from "@supabase/supabase-js"
-import { supabase } from "./supabase"
-import { isAtlanEmail } from "./is-atlan-email"
+import { supabase } from "./supabase-client"
 
-type AuthContextType = {
+// Define the shape of the auth context
+interface AuthContextType {
   user: User | null
   session: Session | null
   loading: boolean
   error: Error | null
-  isAtlanEmail: (email: string) => boolean
+  signOut: () => Promise<void>
   refreshSession: () => Promise<void>
 }
 
-const AuthContext = createContext<AuthContextType>({
-  user: null,
-  session: null,
-  loading: true,
-  error: null,
-  isAtlanEmail: () => false,
-  refreshSession: async () => {},
-})
+// Create the auth context
+const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
-export const useAuth = () => useContext(AuthContext)
-
+// Create a provider component
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
-  const [authInitialized, setAuthInitialized] = useState(false)
 
-  // This will prevent unnecessary error messages during normal authentication flows
-  const clearAuthErrors = useCallback(() => {
-    // Clear any URL parameters that might cause error messages
-    if (typeof window !== "undefined") {
-      const url = new URL(window.location.href)
-      if (url.searchParams.has("error") && url.searchParams.get("error")?.includes("authentication code")) {
-        url.searchParams.delete("error")
-        window.history.replaceState({}, "", url.toString())
-      }
-    }
-  }, [])
-
-  // Function to refresh the session - memoized with useCallback
+  // Function to refresh the session
   const refreshSession = useCallback(async () => {
     try {
-      console.log("Refreshing session")
       const { data, error } = await supabase.auth.getSession()
-
       if (error) {
-        console.error("Error refreshing session:", error)
-        setError(error)
-        return
+        throw error
       }
 
-      if (data.session) {
-        console.log("Session refreshed successfully for:", data.session.user.email)
-        console.log("Session expires at:", new Date(data.session.expires_at! * 1000).toLocaleString())
-        setSession(data.session)
-        setUser(data.session.user)
-      } else {
-        console.log("No session found during refresh")
-        setSession(null)
-        setUser(null)
-      }
-    } catch (e: any) {
-      console.error("Exception in refreshSession:", e)
-      setError(e)
+      setSession(data.session)
+      setUser(data.session?.user ?? null)
+    } catch (err: any) {
+      console.error("Error refreshing session:", err)
+      setError(err)
+    } finally {
+      setLoading(false)
     }
   }, [])
 
-  // Get initial session - only run once
-  useEffect(() => {
-    // Clear any authentication error parameters that might be in the URL
-    clearAuthErrors()
-
-    // Set a timeout to prevent infinite loading
-    const timeoutId = setTimeout(() => {
-      if (loading) {
-        console.log("Auth initialization timed out")
-        setLoading(false)
-      }
-    }, 5000) // 5 second timeout
-
-    // Get session from local storage
-    const getInitialSession = async () => {
-      console.log("Getting initial session")
-      try {
-        setLoading(true)
-
-        // First try to get the session from the browser storage
-        const { data, error } = await supabase.auth.getSession()
-
-        if (error) {
-          console.error("Error getting session:", error)
-          setError(error)
-        } else if (data.session) {
-          console.log("Initial session found for:", data.session.user.email)
-          console.log("Session expires at:", new Date(data.session.expires_at! * 1000).toLocaleString())
-          setSession(data.session)
-          setUser(data.session.user)
-        } else {
-          console.log("No initial session found")
-        }
-      } catch (e: any) {
-        console.error("Exception in getInitialSession:", e)
-        setError(e)
-      } finally {
-        setLoading(false)
-        setAuthInitialized(true)
-        clearTimeout(timeoutId)
-      }
+  // Sign out function
+  const signOut = useCallback(async () => {
+    try {
+      await supabase.auth.signOut()
+      setUser(null)
+      setSession(null)
+    } catch (err: any) {
+      console.error("Error signing out:", err)
+      setError(err)
     }
+  }, [])
 
-    getInitialSession()
-
-    return () => {
-      clearTimeout(timeoutId)
-    }
-  }, [clearAuthErrors])
-
-  // Set up auth state change listener
+  // Initialize auth state
   useEffect(() => {
-    if (!authInitialized) return
+    // Set loading to true when the component mounts
+    setLoading(true)
 
-    // Listen for auth changes
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
+    // Get the initial session
+    refreshSession()
+
+    // Subscribe to auth changes
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, newSession) => {
       console.log("Auth state changed:", event)
-
-      if (session) {
-        console.log("New session for:", session.user.email)
-        console.log("Session expires at:", new Date(session.expires_at! * 1000).toLocaleString())
-        setSession(session)
-        setUser(session.user)
-      } else if (event === "SIGNED_OUT") {
-        console.log("User signed out")
-        setSession(null)
-        setUser(null)
-      }
-
+      setSession(newSession)
+      setUser(newSession?.user ?? null)
       setLoading(false)
     })
 
+    // Clean up the subscription
     return () => {
-      subscription.unsubscribe()
+      authListener.subscription.unsubscribe()
     }
-  }, [authInitialized])
+  }, [refreshSession])
 
   // Memoize the context value to prevent unnecessary re-renders
-  const contextValue = useMemo(
-    () => ({
+  const value = useMemo(() => {
+    return {
       user,
       session,
       loading,
       error,
-      isAtlanEmail,
+      signOut,
       refreshSession,
-    }),
-    [user, session, loading, error, refreshSession],
-  )
+    }
+  }, [user, session, loading, error, signOut, refreshSession])
 
-  return <AuthContext.Provider value={contextValue}>{children}</AuthContext.Provider>
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
+}
+
+// Create a hook to use the auth context
+export function useAuth() {
+  const context = useContext(AuthContext)
+  if (context === undefined) {
+    throw new Error("useAuth must be used within an AuthProvider")
+  }
+  return context
 }

@@ -6,6 +6,8 @@ import { AuthProvider } from "@/lib/auth-context"
 import { Toaster } from "@/components/ui/toaster"
 import { PreLaunchBanner } from "@/components/pre-launch-banner"
 import { getChallengeStatus } from "@/app/actions/challenge-actions"
+import Header from "@/components/header"
+import Footer from "@/components/footer"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -28,10 +30,17 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
           <AuthProvider>
             <div className="min-h-screen flex flex-col">
+              {/* Header is now always visible on all pages */}
+              <Header />
+
               {/* Show pre-launch banner if challenge hasn't started */}
               <PreLaunchBanner launchDate={launchDate} isChallengeLive={started} />
 
-              {children}
+              {/* Main content with flex-grow to push footer down */}
+              <main className="flex-grow">{children}</main>
+
+              {/* Footer always visible at the bottom */}
+              <Footer />
             </div>
             <Toaster />
           </AuthProvider>

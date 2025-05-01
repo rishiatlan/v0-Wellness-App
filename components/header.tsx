@@ -21,13 +21,14 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { useEffect, useState } from "react"
 import { isAdmin } from "@/lib/admin-utils"
+import { getEmailAssetUrl, getFallbackAssetUrl } from "@/lib/asset-utils"
 
 const getNavigation = (userEmail) => {
   const baseNavigation = [
     { name: "Home", href: "/" },
     { name: "Daily Tracker", href: "/daily-tracker" },
     { name: "My Progress", href: "/my-progress" },
-    { name: "Team Challenge", href: "/team-challenge" }, // Re-enabled team challenge link
+    { name: "Team Challenge", href: "/team-challenge" },
     { name: "Leaderboard", href: "/leaderboard" },
   ]
 
@@ -44,6 +45,9 @@ export default function Header() {
   const isMobile = useMobile()
   const { user, loading, refreshSession } = useAuth()
   const [imageError, setImageError] = useState(false)
+
+  // Get the wellness logo URL with fallback
+  const logoUrl = imageError ? getFallbackAssetUrl("wellness.png") : getEmailAssetUrl("wellness.png")
 
   // Refresh session when header mounts to ensure we have the latest auth state
   useEffect(() => {
@@ -72,20 +76,14 @@ export default function Header() {
         <div className="container flex h-16 items-center justify-between">
           <div className="flex items-center gap-2">
             <Link href="/" className="flex items-center gap-2">
-              {!imageError ? (
-                <Image
-                  src="https://mqvcdyzqegzqfwvesoiz.supabase.co/storage/v1/object/public/email-assets//wellness.png"
-                  width={32}
-                  height={32}
-                  alt="Spring into Wellness Logo"
-                  className="object-contain"
-                  onError={() => setImageError(true)}
-                />
-              ) : (
-                <div className="w-8 h-8 bg-gradient-to-r from-teal-500 to-blue-500 rounded-full flex items-center justify-center text-white text-xs font-bold">
-                  SW
-                </div>
-              )}
+              <Image
+                src={logoUrl || "/placeholder.svg"}
+                width={32}
+                height={32}
+                alt="Spring into Wellness Logo"
+                className="object-contain"
+                onError={() => setImageError(true)}
+              />
               <span className="font-bold text-white">Spring into Wellness</span>
             </Link>
           </div>
@@ -99,20 +97,14 @@ export default function Header() {
       <div className="container flex h-16 items-center justify-between">
         <div className="flex items-center gap-2">
           <Link href="/" className="flex items-center gap-2">
-            {!imageError ? (
-              <Image
-                src="https://mqvcdyzqegzqfwvesoiz.supabase.co/storage/v1/object/public/email-assets//wellness.png"
-                width={32}
-                height={32}
-                alt="Spring into Wellness Logo"
-                className="object-contain"
-                onError={() => setImageError(true)}
-              />
-            ) : (
-              <div className="w-8 h-8 bg-gradient-to-r from-teal-500 to-blue-500 rounded-full flex items-center justify-center text-white text-xs font-bold">
-                SW
-              </div>
-            )}
+            <Image
+              src={logoUrl || "/placeholder.svg"}
+              width={32}
+              height={32}
+              alt="Spring into Wellness Logo"
+              className="object-contain"
+              onError={() => setImageError(true)}
+            />
             <span className="hidden font-bold text-white sm:inline-block">Spring into Wellness</span>
           </Link>
         </div>

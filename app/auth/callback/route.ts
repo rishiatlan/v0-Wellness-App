@@ -29,7 +29,10 @@ export async function GET(request: NextRequest) {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        get: (name) => cookieStore.get(name)?.value,
+        get: (name) => {
+          const cookie = cookieStore.get(name)
+          return cookie?.value
+        },
         set: (name, value, options) => {
           try {
             cookieStore.set(name, value, {
@@ -37,16 +40,21 @@ export async function GET(request: NextRequest) {
               path: "/",
               sameSite: "lax",
               secure: process.env.NODE_ENV === "production",
+              maxAge: options?.maxAge || 60 * 60 * 24 * 7, // 7 days default
             })
           } catch (error) {
-            console.error("Error setting cookie:", error)
+            console.error(`Error setting cookie ${name}:`, error)
           }
         },
         remove: (name, options) => {
           try {
-            cookieStore.set(name, "", { ...options, maxAge: 0 })
+            cookieStore.set(name, "", {
+              ...options,
+              path: "/",
+              maxAge: 0,
+            })
           } catch (error) {
-            console.error("Error removing cookie:", error)
+            console.error(`Error removing cookie ${name}:`, error)
           }
         },
       },
@@ -61,6 +69,7 @@ export async function GET(request: NextRequest) {
 
       // If user already has a session, just redirect them
       if (data.session) {
+        console.log("Existing session found, redirecting to:", callbackUrl)
         return NextResponse.redirect(requestUrl.origin + callbackUrl, { status: 302 })
       }
     } catch (error) {
@@ -96,6 +105,7 @@ export async function GET(request: NextRequest) {
       try {
         // Initialize user profile
         await initializeUserProfile(user.id, user.email || "", user.user_metadata?.full_name)
+        console.log("User profile initialized for:", user.email)
       } catch (error) {
         console.error("Error in user profile initialization:", error)
       }

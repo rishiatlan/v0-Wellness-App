@@ -45,6 +45,9 @@ export async function signIn(email: string, password: string) {
   console.log("Authentication attempt in progress for:", email)
 
   try {
+    // Clear any existing sessions first to prevent conflicts
+    await supabase.auth.signOut()
+
     // Use signInWithPassword for email/password auth
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
