@@ -1,27 +1,20 @@
 import { createClient } from "@supabase/supabase-js"
-import type { Database } from "@/types/supabase"
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-
-// Only log errors in production
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.error("Missing Supabase environment variables!")
+// Check if required environment variables are available
+if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+  console.error("Missing Supabase environment variables")
+  throw new Error("Application configuration error: Missing Supabase credentials")
 }
 
-// Create a single supabase client for the entire app
-export const supabase = createClient<Database>(supabaseUrl || "", supabaseAnonKey || "", {
+// Create a single instance of the Supabase client to be used throughout the app
+export const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY, {
   auth: {
     persistSession: true,
+    storageKey: "spring-wellness-auth-token",
     autoRefreshToken: true,
     detectSessionInUrl: true,
-    storageKey: "supabase.auth.token",
   },
 })
 
-// Only log errors in production
-supabase.auth.getSession().then(({ data, error }) => {
-  if (error) {
-    console.error("Error getting initial session:", error)
-  }
-})
+// Export a function to get the client for compatibility with existing code
+export const getSupabaseClient = () => supabase

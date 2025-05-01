@@ -11,7 +11,21 @@ export const createBrowserClient = () => {
       throw new Error("Application configuration error: Missing Supabase credentials")
     }
 
-    return createSupabaseBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
+    return createSupabaseBrowserClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+      {
+        cookies: {
+          name: "spring-wellness-auth",
+        },
+        auth: {
+          persistSession: true,
+          storageKey: "spring-wellness-auth-token",
+          autoRefreshToken: true,
+          detectSessionInUrl: true,
+        },
+      },
+    )
   } catch (error) {
     console.error("Error creating Supabase browser client:", error)
     throw error

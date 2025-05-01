@@ -59,7 +59,15 @@ export async function GET(request: NextRequest) {
       {
         cookies: {
           get: (name) => cookieStore.get(name)?.value,
-          set: (name, value, options) => cookieStore.set(name, value, options),
+          set: (name, value, options) => {
+            // Set cookies with appropriate settings for auth
+            cookieStore.set(name, value, {
+              ...options,
+              path: "/",
+              sameSite: "lax",
+              secure: process.env.NODE_ENV === "production",
+            })
+          },
           remove: (name, options) => cookieStore.set(name, "", { ...options, maxAge: 0 }),
         },
       },
@@ -100,7 +108,11 @@ export async function GET(request: NextRequest) {
       // URL to redirect to after sign in process completes
       const redirectUrl = requestUrl.origin + callbackUrl
       console.log("Full redirect URL:", redirectUrl)
-      return NextResponse.redirect(redirectUrl, { status: 302 })
+
+      // Create a response with the redirect
+      const response = NextResponse.redirect(redirectUrl, { status: 302 })
+
+      return response
     } catch (error) {
       console.error("Unexpected error in auth callback:", error)
       return NextResponse.redirect(

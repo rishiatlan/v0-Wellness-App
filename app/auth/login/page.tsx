@@ -2,7 +2,7 @@ import { CardFooter } from "@/components/ui/card"
 import Link from "next/link"
 import { redirect } from "next/navigation"
 import { cookies } from "next/headers"
-import { createClient } from "@/lib/supabase/server"
+import { createServerClient } from "@supabase/ssr"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -12,14 +12,28 @@ import Image from "next/image"
 export default async function Login({
   searchParams,
 }: {
-  searchParams: { message: string; callbackUrl: string }
+  searchParams: { message: string; error: string; callbackUrl: string }
 }) {
   const cookieStore = cookies()
-  // Since createClient is now async, we need to await it
-  const supabase = await createClient(cookieStore)
+
+  // Create a server client directly
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get: (name) => cookieStore.get(name)?.value,
+        set: (name, value, options) => cookieStore.set(name, value, options),
+        remove: (name, options) => cookieStore.set(name, "", { ...options, maxAge: 0 }),
+      },
+    },
+  )
 
   // Default callback URL to daily-tracker if not specified
   const callbackUrl = searchParams?.callbackUrl || "/daily-tracker"
+
+  // Display error message from searchParams if available
+  const errorMessage = searchParams?.error || searchParams?.message || null
 
   // Wrap this in a try/catch to handle potential errors
   try {
@@ -45,8 +59,26 @@ export default async function Login({
     const redirectUrl = (formData.get("callbackUrl") as string) || "/daily-tracker"
 
     try {
-      // Since createClient is now async, we need to await it
-      const supabase = await createClient(cookieStore)
+      // Create a server client directly
+      const supabase = createServerClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        {
+          cookies: {
+            get: (name) => cookieStore.get(name)?.value,
+            set: (name, value, options) => {
+              // Set cookies with appropriate settings for auth
+              cookieStore.set(name, value, {
+                ...options,
+                path: "/",
+                sameSite: "lax",
+                secure: process.env.NODE_ENV === "production",
+              })
+            },
+            remove: (name, options) => cookieStore.set(name, "", { ...options, maxAge: 0 }),
+          },
+        },
+      )
 
       // Improved error logging
       console.log(`Attempting to sign in user: ${email}`)
@@ -68,7 +100,7 @@ export default async function Login({
         }
 
         return redirect(
-          `/auth/login?message=${encodeURIComponent(errorMessage)}&callbackUrl=${encodeURIComponent(redirectUrl)}`,
+          `/auth/login?error=${encodeURIComponent(errorMessage)}&callbackUrl=${encodeURIComponent(redirectUrl)}`,
         )
       }
 
@@ -76,7 +108,7 @@ export default async function Login({
       if (!data.session) {
         console.error("No session created after successful authentication")
         return redirect(
-          `/auth/login?message=${encodeURIComponent("Authentication succeeded but session creation failed. Please try again.")}&callbackUrl=${encodeURIComponent(redirectUrl)}`,
+          `/auth/login?error=${encodeURIComponent("Authentication succeeded but session creation failed. Please try again.")}&callbackUrl=${encodeURIComponent(redirectUrl)}`,
         )
       }
 
@@ -85,7 +117,7 @@ export default async function Login({
     } catch (error: any) {
       console.error("Unexpected error during sign in:", error)
       return redirect(
-        `/auth/login?message=${encodeURIComponent("An unexpected error occurred. Please try again later.")}&callbackUrl=${encodeURIComponent(redirectUrl)}`,
+        `/auth/login?error=${encodeURIComponent("An unexpected error occurred. Please try again later.")}&callbackUrl=${encodeURIComponent(redirectUrl)}`,
       )
     }
   }
@@ -106,10 +138,10 @@ export default async function Login({
             </div>
             <CardTitle className="text-2xl font-bold tracking-tight">Welcome back</CardTitle>
             <CardDescription className="text-gray-400">Sign in to your account to continue</CardDescription>
-            {searchParams?.message && (
+            {errorMessage && (
               <p className="mt-2 rounded-lg bg-destructive/15 p-3 text-center text-sm text-destructive">
-                {searchParams.message}
-                {searchParams.message.includes("VPN") && (
+                {errorMessage}
+                {errorMessage.includes("VPN") && (
                   <span className="block mt-1 font-semibold">
                     Note: VPN connections may interfere with authentication. Try disabling your VPN.
                   </span>

@@ -59,16 +59,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (data.session) {
         console.log("Session refreshed successfully for:", data.session.user.email)
+        console.log("Session expires at:", new Date(data.session.expires_at! * 1000).toLocaleString())
         setSession(data.session)
         setUser(data.session.user)
       } else {
         console.log("No session found during refresh")
         setSession(null)
         setUser(null)
-      }
-      // Minimal logging in production
-      if (process.env.NODE_ENV !== "production") {
-        console.log("Auth: Session refresh", data.session ? "successful" : "no session found")
       }
     } catch (e: any) {
       console.error("Exception in refreshSession:", e)
@@ -81,11 +78,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Clear any authentication error parameters that might be in the URL
     clearAuthErrors()
 
+    // Set a timeout to prevent infinite loading
+    const timeoutId = setTimeout(() => {
+      if (loading) {
+        console.log("Auth initialization timed out")
+        setLoading(false)
+      }
+    }, 5000) // 5 second timeout
+
     // Get session from local storage
     const getInitialSession = async () => {
       console.log("Getting initial session")
       try {
         setLoading(true)
+
+        // First try to get the session from the browser storage
         const { data, error } = await supabase.auth.getSession()
 
         if (error) {
@@ -99,20 +106,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         } else {
           console.log("No initial session found")
         }
-        // Minimal logging in production
-        if (process.env.NODE_ENV !== "production") {
-          console.log("Auth: Initial session", data.session ? "found" : "not found")
-        }
       } catch (e: any) {
         console.error("Exception in getInitialSession:", e)
         setError(e)
       } finally {
         setLoading(false)
         setAuthInitialized(true)
+        clearTimeout(timeoutId)
       }
     }
 
     getInitialSession()
+
+    return () => {
+      clearTimeout(timeoutId)
+    }
   }, [clearAuthErrors])
 
   // Set up auth state change listener
@@ -134,10 +142,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         console.log("User signed out")
         setSession(null)
         setUser(null)
-      }
-      // Minimal logging in production
-      if (process.env.NODE_ENV !== "production") {
-        console.log("Auth: State changed to", event)
       }
 
       setLoading(false)
