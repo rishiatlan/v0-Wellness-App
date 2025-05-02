@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { createContext, useContext, useEffect, useState, useCallback } from "react"
+import { createContext, useContext, useEffect, useState, useCallback, useRef } from "react"
 import type { Session, User } from "@supabase/supabase-js"
 import { supabase } from "./supabase-client"
 
@@ -25,7 +25,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
-  const [isInitialized, setIsInitialized] = useState(false)
+  const authChangeProcessed = useRef(false)
 
   // Function to refresh the session
   const refreshSession = useCallback(async () => {
@@ -84,7 +84,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (mounted) {
           setSession(data.session)
           setUser(data.session?.user ?? null)
-          setIsInitialized(true)
         }
       } catch (err) {
         console.error("Exception during auth initialization:", err)
@@ -99,15 +98,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data: authListener } = supabase.auth.onAuthStateChange((event, newSession) => {
       console.log("Auth state changed:", event)
 
+      // Prevent multiple auth change handlers from firing
+      if (authChangeProcessed.current && event === "SIGNED_IN") {
+        console.log("Auth change already processed, skipping")
+        return
+      }
+
       if (mounted) {
         setSession(newSession)
         setUser(newSession?.user ?? null)
         setLoading(false)
 
-        // If we get a signed_in event, reload the page to ensure all components have the latest auth state
+        // Mark that we've processed an auth change
         if (event === "SIGNED_IN") {
-          console.log("User signed in, reloading page to update auth state")
-          window.location.reload()
+          authChangeProcessed.current = true
         }
       }
     })
@@ -129,7 +133,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     refreshSession,
   }
 
-  // Only render children once we've initialized auth to prevent hydration mismatch
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 

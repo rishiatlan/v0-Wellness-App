@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -13,7 +13,6 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AlertCircle, Loader2, Info } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { supabase } from "@/lib/supabase-client"
-import { DebugAuthButton } from "@/components/debug-auth-button"
 
 export default function LoginPage() {
   const [email, setEmail] = useState("")
@@ -24,6 +23,7 @@ export default function LoginPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { user, session } = useAuth()
+  const redirected = useRef(false)
 
   // Get parameters from URL
   const errorParam = searchParams?.get("error")
@@ -42,11 +42,14 @@ export default function LoginPage() {
 
   // Redirect if already logged in
   useEffect(() => {
-    if (user && session) {
+    if (user && session && !redirected.current) {
       console.log("User already logged in, redirecting to:", callbackUrl)
-      window.location.href = callbackUrl
+      redirected.current = true
+
+      // Use router.push instead of window.location for a smoother transition
+      router.push(callbackUrl)
     }
-  }, [user, session, callbackUrl])
+  }, [user, session, router, callbackUrl])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -89,8 +92,11 @@ export default function LoginPage() {
         // Store last login date for streak calculation
         localStorage.setItem("lastLogin", new Date().toISOString().split("T")[0])
 
-        // Use direct navigation to ensure the page reloads with the new auth state
-        window.location.href = callbackUrl
+        // Set the redirected flag to prevent double redirects
+        redirected.current = true
+
+        // Use router.push for a smoother transition
+        router.push(callbackUrl)
       } else {
         console.error("Login succeeded but no session returned")
         setError("Authentication succeeded but session creation failed. Please try again.")
@@ -167,9 +173,6 @@ export default function LoginPage() {
               )}
             </Button>
           </form>
-
-          {/* Add debug button in development */}
-          {process.env.NODE_ENV !== "production" && <DebugAuthButton />}
         </CardContent>
         <CardFooter className="flex flex-col space-y-4">
           <div className="text-center text-sm">
