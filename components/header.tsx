@@ -24,7 +24,9 @@ import { isAdmin } from "@/lib/admin-utils"
 import { Badge } from "@/components/ui/badge"
 import { getUserTeam } from "@/app/actions/team-actions"
 
+// Fix: Add safe fallback for getNavigation function
 const getNavigation = (userEmail) => {
+  // Ensure userEmail is defined before using it
   const baseNavigation = [
     { name: "Home", href: "/" },
     { name: "Daily Tracker", href: "/daily-tracker" },
@@ -33,7 +35,7 @@ const getNavigation = (userEmail) => {
     { name: "Leaderboard", href: "/leaderboard" },
   ]
 
-  // Add admin link if user is an admin
+  // Add admin link if user is an admin - with null check
   if (userEmail && isAdmin(userEmail)) {
     baseNavigation.push({ name: "Admin", href: "/admin" })
   }
@@ -44,7 +46,10 @@ const getNavigation = (userEmail) => {
 export default function Header() {
   const pathname = usePathname()
   const isMobile = useMobile()
-  const { user, loading, refreshSession } = useAuth()
+  // Fix: Add safe destructuring with fallback for auth context
+  const auth = useAuth() || {}
+  const { user = null, loading = false, refreshSession = async () => {} } = auth
+
   const [imageError, setImageError] = useState(false)
   const [retryCount, setRetryCount] = useState(0)
   const [isRefreshing, setIsRefreshing] = useState(false)

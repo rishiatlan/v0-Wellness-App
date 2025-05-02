@@ -61,7 +61,6 @@
     "@supabase/supabase-js": "latest",
     "@emotion/is-prop-valid": "latest",
     "@tanstack/react-query": "latest",
-    "scheduler": "latest",
     "@supabase/auth-helpers-nextjs": "latest",
     "fs": "latest",
     "path": "latest",
@@ -70,8 +69,7 @@
     "canvas-confetti": "latest",
     "framer-motion": "latest",
     "@tailwindcss/typography": "latest",
-    "@tanstack/react-query-devtools": "latest",
-    "use-context-selector": "latest"
+    "@tanstack/react-query-devtools": "latest"
   },
   "devDependencies": {
     "@types/node": "^22",

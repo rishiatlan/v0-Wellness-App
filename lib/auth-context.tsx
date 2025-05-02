@@ -1,8 +1,7 @@
 "use client"
 
+import { createContext, useContext, useEffect, useState, useCallback, useMemo } from "react"
 import type React from "react"
-import { useCallback, useEffect, useRef, useMemo } from "react"
-import { createContext, useContextSelector } from "use-context-selector"
 import type { Session, User } from "@supabase/supabase-js"
 import { supabase } from "./supabase-client"
 
@@ -16,7 +15,7 @@ interface AuthContextType {
   refreshSession: () => Promise<void>
 }
 
-// Create the auth context
+// Create the auth context with default values to prevent undefined errors
 const AuthContext = createContext<AuthContextType>({
   user: null,
   session: null,
@@ -28,29 +27,27 @@ const AuthContext = createContext<AuthContextType>({
 
 // Create a provider component
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  // Use refs for state to prevent unnecessary re-renders
-  const userRef = useRef<User | null>(null)
-  const sessionRef = useRef<Session | null>(null)
-  const loadingRef = useRef<boolean>(true)
-  const errorRef = useRef<Error | null>(null)
-  const authListenerRef = useRef<{ subscription: { unsubscribe: () => void } } | null>(null)
+  const [user, setUser] = useState<User | null>(null)
+  const [session, setSession] = useState<Session | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<Error | null>(null)
 
   // Function to refresh the session
   const refreshSession = useCallback(async () => {
     try {
-      loadingRef.current = true
+      setLoading(true)
       const { data, error } = await supabase.auth.getSession()
       if (error) {
         throw error
       }
 
-      sessionRef.current = data.session
-      userRef.current = data.session?.user ?? null
+      setSession(data.session)
+      setUser(data.session?.user ?? null)
     } catch (err: any) {
       console.error("Error refreshing session:", err)
-      errorRef.current = err
+      setError(err)
     } finally {
-      loadingRef.current = false
+      setLoading(false)
     }
   }, [])
 
@@ -58,95 +55,54 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = useCallback(async () => {
     try {
       await supabase.auth.signOut()
-      userRef.current = null
-      sessionRef.current = null
+      setUser(null)
+      setSession(null)
     } catch (err: any) {
       console.error("Error signing out:", err)
-      errorRef.current = err
+      setError(err)
     }
   }, [])
 
   // Initialize auth state
   useEffect(() => {
     // Set loading to true when the component mounts
-    loadingRef.current = true
+    setLoading(true)
 
     // Get the initial session
     refreshSession()
 
-    // Subscribe to auth changes - ensure we only have one listener
-    if (authListenerRef.current) {
-      authListenerRef.current.subscription.unsubscribe()
-    }
-
+    // Subscribe to auth changes
     const { data: authListener } = supabase.auth.onAuthStateChange((event, newSession) => {
       console.log("Auth state changed:", event)
-
-      // Update refs directly to avoid unnecessary re-renders
-      sessionRef.current = newSession
-      userRef.current = newSession?.user ?? null
-      loadingRef.current = false
+      setSession(newSession)
+      setUser(newSession?.user ?? null)
+      setLoading(false)
     })
-
-    authListenerRef.current = authListener
 
     // Clean up the subscription
     return () => {
-      if (authListenerRef.current) {
-        authListenerRef.current.subscription.unsubscribe()
-      }
+      authListener.subscription.unsubscribe()
     }
   }, [refreshSession])
 
   // Memoize the context value to prevent unnecessary re-renders
   const value = useMemo(
     () => ({
-      user: userRef.current,
-      session: sessionRef.current,
-      loading: loadingRef.current,
-      error: errorRef.current,
+      user,
+      session,
+      loading,
+      error,
       signOut,
       refreshSession,
     }),
-    [signOut, refreshSession],
+    [user, session, loading, error, signOut, refreshSession],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 
-// Create hooks to use the auth context with selectors for better performance
-export function useUser() {
-  return useContextSelector(AuthContext, (state) => state.user)
-}
-
-export function useSession() {
-  return useContextSelector(AuthContext, (state) => state.session)
-}
-
-export function useAuthLoading() {
-  return useContextSelector(AuthContext, (state) => state.loading)
-}
-
-export function useAuthError() {
-  return useContextSelector(AuthContext, (state) => state.error)
-}
-
-export function useSignOut() {
-  return useContextSelector(AuthContext, (state) => state.signOut)
-}
-
-export function useRefreshSession() {
-  return useContextSelector(AuthContext, (state) => state.refreshSession)
-}
-
-// Legacy hook for backward compatibility
+// Create a hook to use the auth context
 export function useAuth() {
-  const user = useUser()
-  const session = useSession()
-  const loading = useAuthLoading()
-  const error = useAuthError()
-  const signOut = useSignOut()
-  const refreshSession = useRefreshSession()
-
-  return { user, session, loading, error, signOut, refreshSession }
+  const context = useContext(AuthContext)
+  return context
 }
