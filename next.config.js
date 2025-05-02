@@ -2,6 +2,8 @@
 const nextConfig = {
   reactStrictMode: true,
   swcMinify: true,
+
+  // Safe image handling without triggering sharp
   images: {
     domains: ["mqvcdyzqegzqfwvesoiz.supabase.co", "supabase.co", "localhost", "vercel.app", "vercel.com"],
     remotePatterns: [
@@ -11,15 +13,21 @@ const nextConfig = {
         pathname: "/**",
       },
     ],
+    // Disables built-in Image Optimization (no sharp needed)
     unoptimized: true,
   },
-  // Clean experimental section - only keep valid options for Next.js 15.x
+
+  // Remove deprecated/unsupported experimental flags
+  // Only include valid ones for Next.js 15
   experimental: {
-    optimizeCss: true,
+    optimizeCss: false, // Turn OFF to avoid critters issue
   },
-  // Optimize compiler options
+
+  // Transpile Radix UI components (if you're using them)
+  transpilePackages: ["@radix-ui"],
+
   compiler: {
-    // Remove console.log in production
+    // Strip console logs in prod except error/warn
     removeConsole:
       process.env.NODE_ENV === "production"
         ? {
@@ -27,7 +35,7 @@ const nextConfig = {
           }
         : false,
   },
-  // Simplified headers
+
   async headers() {
     return [
       {
@@ -41,9 +49,11 @@ const nextConfig = {
       },
     ]
   },
+
   eslint: {
     ignoreDuringBuilds: true,
   },
+
   typescript: {
     ignoreBuildErrors: true,
   },
