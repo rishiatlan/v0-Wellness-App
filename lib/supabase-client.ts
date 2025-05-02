@@ -42,45 +42,16 @@ const createSingletonClient = () => {
 // Export as a singleton to prevent multiple instances
 export const supabase = createSingletonClient()
 
-// Initialize and test connection with retry logic
+// Initialize and test connection
 if (typeof window !== "undefined") {
   // Only run in browser environment
-  let sessionInitAttempts = 0
-
-  const initSession = () => {
-    supabase.auth.getSession().then(({ data, error }) => {
-      if (error) {
-        console.error("Error getting initial session:", error)
-        if (sessionInitAttempts < 3) {
-          sessionInitAttempts++
-          console.log(`Retrying session fetch (attempt ${sessionInitAttempts})...`)
-          setTimeout(initSession, 1000) // Retry after 1 second
-        }
-      } else if (data.session) {
-        console.log("Initial session exists, expires at:", new Date(data.session.expires_at! * 1000).toLocaleString())
-      } else {
-        console.log("No initial session found")
-        if (sessionInitAttempts < 3) {
-          sessionInitAttempts++
-          console.log(`Retrying session fetch (attempt ${sessionInitAttempts})...`)
-          setTimeout(initSession, 1000) // Retry after 1 second
-        }
-      }
-    })
-  }
-
-  initSession()
-
-  // Add auth state change listener for debugging
-  supabase.auth.onAuthStateChange((event, session) => {
-    console.log(`Auth state changed: ${event}`, session ? "Session exists" : "No session")
-
-    // Retry session fetch if initial attempt failed
-    if (event === "INITIAL_SESSION" && !session) {
-      setTimeout(() => {
-        console.log("Retrying session fetch after INITIAL_SESSION event...")
-        supabase.auth.getSession()
-      }, 500)
+  supabase.auth.getSession().then(({ data, error }) => {
+    if (error) {
+      console.error("Error getting initial session:", error)
+    } else if (data.session) {
+      console.log("Initial session exists, expires at:", new Date(data.session.expires_at! * 1000).toLocaleString())
+    } else {
+      console.log("No initial session found")
     }
   })
 }
