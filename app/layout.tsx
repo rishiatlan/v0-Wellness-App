@@ -1,6 +1,7 @@
 import type React from "react"
-import "./globals.css"
+import type { Metadata } from "next"
 import { Inter } from "next/font/google"
+import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { AuthProvider } from "@/lib/auth-context"
 import { Toaster } from "@/components/ui/toaster"
@@ -8,9 +9,9 @@ import { PreLaunchBanner } from "@/components/pre-launch-banner"
 import { getChallengeStatus } from "@/app/actions/challenge-actions"
 import Header from "@/components/header"
 import Footer from "@/components/footer"
-import { AssetPreloader } from "@/components/asset-preloader"
 import { AppInitializer } from "@/components/app-initializer"
-import { APP_VERSION, APP_URL } from "@/lib/env-vars"
+import { APP_URL } from "@/lib/env-vars"
+import { ClientOnly } from "@/components/client-only"
 
 // Use Inter with expanded subset for better language support
 const inter = Inter({
@@ -19,13 +20,17 @@ const inter = Inter({
   variable: "--font-inter",
 })
 
-export const metadata = {
+export const metadata: Metadata = {
   title: "Spring into Wellness",
   description: "Atlan's Spring Wellness Challenge - Track your daily wellness activities and compete with colleagues",
-  viewport: "width=device-width, initial-scale=1",
-  themeColor: "#0c1425",
-  version: APP_VERSION,
     generator: 'v0.dev'
+}
+
+// Separate viewport export to fix Next.js metadata warning
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  themeColor: "#0c1425",
 }
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
@@ -53,24 +58,34 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 
         {/* Add canonical URL */}
         <link rel="canonical" href={APP_URL} />
+
+        {/* Preload critical assets with proper attributes */}
+        <link rel="preload" as="image" href="/wellness.png" crossOrigin="anonymous" />
+        <link rel="preload" as="image" href="/wellness-logo.png" crossOrigin="anonymous" />
+        <link rel="preload" as="image" href="/abstract-geometric-logo.png" crossOrigin="anonymous" />
       </head>
       <body className={`${inter.className} min-h-screen flex flex-col`}>
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
-          <AssetPreloader />
           <AuthProvider>
             <AppInitializer />
             <div className="min-h-screen flex flex-col">
-              {/* Header is now always visible on all pages */}
-              <Header />
+              {/* Wrap components that might cause hydration mismatches */}
+              <ClientOnly>
+                <Header />
+              </ClientOnly>
 
               {/* Show pre-launch banner if challenge hasn't started */}
-              <PreLaunchBanner launchDate={startDate} isChallengeLive={started} />
+              <ClientOnly>
+                <PreLaunchBanner launchDate={startDate} isChallengeLive={started} />
+              </ClientOnly>
 
               {/* Main content with flex-grow to push footer down */}
               <main className="flex-grow">{children}</main>
 
               {/* Footer always visible at the bottom */}
-              <Footer />
+              <ClientOnly>
+                <Footer />
+              </ClientOnly>
             </div>
             <Toaster />
           </AuthProvider>

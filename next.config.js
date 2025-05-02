@@ -21,21 +21,20 @@ const nextConfig = {
   async headers() {
     return [
       {
-        // Apply these headers to all routes
+        // Specific rules for image files (order matters - more specific first)
+        source: "/:path*.(jpg|jpeg|png|svg|webp|gif)",
+        headers: [
+          { key: "Cross-Origin-Resource-Policy", value: "cross-origin" },
+          { key: "Cross-Origin-Embedder-Policy", value: "credentialless" },
+        ],
+      },
+      {
+        // General rules for all routes (applied after more specific rules)
         source: "/(.*)",
         headers: [
-          {
-            key: "Cross-Origin-Opener-Policy",
-            value: "same-origin",
-          },
-          {
-            key: "Cross-Origin-Embedder-Policy",
-            value: "require-corp",
-          },
-          {
-            key: "Cross-Origin-Resource-Policy",
-            value: "cross-origin",
-          },
+          { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
+          { key: "Cross-Origin-Embedder-Policy", value: "credentialless" },
+          { key: "Cross-Origin-Resource-Policy", value: "cross-origin" },
         ],
       },
     ]

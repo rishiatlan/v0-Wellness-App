@@ -34,15 +34,42 @@ export function getFallbackAssetUrl(assetName: string): string {
   return url
 }
 
-// Function to preload assets
-export function preloadAssets(assetNames: string[]): void {
+/**
+ * Preloads assets to improve initial load performance
+ * @param assets Array of asset filenames to preload
+ */
+export function preloadAssets(assets: string[]) {
   if (typeof window === "undefined") return
 
-  assetNames.forEach((assetName) => {
+  assets.forEach((asset) => {
     const link = document.createElement("link")
     link.rel = "preload"
-    link.as = "image"
-    link.href = getEmailAssetUrl(assetName)
+
+    // Determine the correct 'as' attribute based on file extension
+    const extension = asset.split(".").pop()?.toLowerCase()
+    if (
+      extension === "png" ||
+      extension === "jpg" ||
+      extension === "jpeg" ||
+      extension === "gif" ||
+      extension === "webp"
+    ) {
+      link.as = "image"
+    } else if (extension === "css") {
+      link.as = "style"
+    } else if (extension === "js") {
+      link.as = "script"
+    } else if (extension === "woff" || extension === "woff2" || extension === "ttf") {
+      link.as = "font"
+    }
+
+    // Set crossorigin attribute for CORS resources
+    link.crossOrigin = "anonymous"
+
+    // Set the href
+    link.href = `/${asset}`
+
+    // Add to document head
     document.head.appendChild(link)
   })
 }

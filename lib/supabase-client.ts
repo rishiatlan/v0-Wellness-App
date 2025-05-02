@@ -1,14 +1,6 @@
 import { createClient } from "@supabase/supabase-js"
 import type { Database } from "@/types/supabase"
 
-// Environment variables
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.error("Missing Supabase environment variables!")
-}
-
 // Create a safe global variable that works in both browser and server
 const getGlobalThis = () => {
   if (typeof globalThis !== "undefined") return globalThis
@@ -18,11 +10,11 @@ const getGlobalThis = () => {
   throw new Error("Unable to locate global object")
 }
 
-// Type for our global store
-type SupabaseClientSingleton = ReturnType<typeof createClient> | undefined
+// Unique key for storing the Supabase client instance
+const GLOBAL_SUPABASE_CLIENT_KEY = "__SPRING_WELLNESS_SUPABASE_CLIENT"
 
-// Create a key for our global instance
-const GLOBAL_SUPABASE_CLIENT_KEY = "__supabase_singleton"
+// Type for our singleton
+type SupabaseClientSingleton = ReturnType<typeof createClient<Database>>
 
 // Get the global object safely
 const globalObj = getGlobalThis() as unknown as {
@@ -31,38 +23,28 @@ const globalObj = getGlobalThis() as unknown as {
 
 // Create a singleton Supabase client for the entire app
 export const supabase = (() => {
-  // Check if we already have an instance
+  // Return existing instance if available
   if (globalObj[GLOBAL_SUPABASE_CLIENT_KEY]) {
-    return globalObj[GLOBAL_SUPABASE_CLIENT_KEY]!
+    return globalObj[GLOBAL_SUPABASE_CLIENT_KEY] as SupabaseClientSingleton
   }
 
-  // Create a new instance
-  console.log("Creating new Supabase client instance")
-  const client = createClient<Database>(supabaseUrl || "", supabaseAnonKey || "", {
-    auth: {
-      persistSession: true,
-      autoRefreshToken: true,
-      detectSessionInUrl: true,
-      storageKey: "supabase-auth-token",
-      flowType: "pkce",
-      debug: process.env.NODE_ENV !== "production",
-      cookieOptions: {
-        name: "sb-auth-token",
-        lifetime: 60 * 60 * 24 * 7, // 7 days
-        domain: "",
-        path: "/",
-        sameSite: "lax",
-        secure: process.env.NODE_ENV === "production",
+  // Create new instance if one doesn't exist
+  const client = createClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      auth: {
+        persistSession: true,
+        storageKey: "sb-spring-wellness-auth-token",
       },
     },
-  })
+  )
 
-  // Store the instance in our global object
+  // Store the client in our global object
   globalObj[GLOBAL_SUPABASE_CLIENT_KEY] = client
+
   return client
 })()
 
-// Export a function to get the client
-export function getSupabaseClient() {
-  return supabase
-}
+// Export a type for the Supabase client
+export type SupabaseClient = typeof supabase
