@@ -1,46 +1,25 @@
+import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
-import { createServerSupabaseClient } from "@/lib/supabase-server"
-
-// Public routes that don't require authentication
-const PUBLIC_ROUTES = [
-  "/",
-  "/auth/login",
-  "/auth/register",
-  "/auth/reset-password",
-  "/auth/callback",
-  "/terms",
-  "/privacy",
-  "/health",
-  "/contact",
-]
+import { isPublicRoute } from "./public-routes"
 
 /**
- * Server-side authentication check for server components
- * Much more efficient than middleware
+ * Server component function to check authentication
+ * Use this in server components that require authentication
  */
-export async function checkServerAuth(pathname: string) {
-  // Check if this is a public route
-  if (PUBLIC_ROUTES.some((route) => pathname === route || pathname.startsWith(route + "/"))) {
-    return { isAuthenticated: true, isPublicRoute: true }
+export function checkServerAuth(currentPath: string) {
+  // Skip auth check for public routes
+  if (isPublicRoute(currentPath)) {
+    return true
   }
 
-  // Get the supabase client
-  const supabase = createServerSupabaseClient()
+  // Check for authentication
+  const cookieStore = cookies()
+  const authToken = cookieStore.get("sb-auth-token")
 
-  // Check if the user is authenticated
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
-
-  if (!session) {
-    // Redirect to login if not authenticated
-    redirect(`/auth/login?callbackUrl=${encodeURIComponent(pathname)}`)
+  if (!authToken) {
+    // Redirect to login with callback URL
+    redirect(`/auth/login?callbackUrl=${encodeURIComponent(currentPath)}`)
   }
 
-  return {
-    isAuthenticated: true,
-    isPublicRoute: false,
-    session,
-    user: session.user,
-  }
+  return true
 }

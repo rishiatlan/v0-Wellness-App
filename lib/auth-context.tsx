@@ -15,7 +15,7 @@ interface AuthContextType {
   refreshSession: () => Promise<void>
 }
 
-// Create the auth context with default values to prevent undefined errors
+// Create the auth context with default values
 const AuthContext = createContext<AuthContextType>({
   user: null,
   session: null,
@@ -31,6 +31,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
+  const [authListener, setAuthListener] = useState<{ subscription: { unsubscribe: () => void } } | null>(null)
 
   // Function to refresh the session
   const refreshSession = useCallback(async () => {
@@ -72,18 +73,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     refreshSession()
 
     // Subscribe to auth changes
-    const { data: authListener } = supabase.auth.onAuthStateChange((event, newSession) => {
+    const { data } = supabase.auth.onAuthStateChange((event, newSession) => {
       console.log("Auth state changed:", event)
       setSession(newSession)
       setUser(newSession?.user ?? null)
       setLoading(false)
     })
 
+    // Store the listener
+    setAuthListener(data)
+
     // Clean up the subscription
     return () => {
-      authListener.subscription.unsubscribe()
+      if (data && data.subscription) {
+        data.subscription.unsubscribe()
+      }
     }
-  }, [refreshSession])
+  }, [refreshSession]) // Only depend on refreshSession
 
   // Memoize the context value to prevent unnecessary re-renders
   const value = useMemo(
@@ -104,5 +110,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 // Create a hook to use the auth context
 export function useAuth() {
   const context = useContext(AuthContext)
+  if (context === undefined) {
+    throw new Error("useAuth must be used within an AuthProvider")
+  }
   return context
 }

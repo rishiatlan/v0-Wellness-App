@@ -13,6 +13,8 @@ import { AppInitializer } from "@/components/app-initializer"
 import { APP_VERSION, APP_URL } from "@/lib/env-vars"
 import { ErrorBoundary } from "@/components/error-boundary"
 import { PerformanceMonitor } from "@/components/performance-monitor"
+import ProtectedLayout from "./protected-layout"
+import { headers } from "next/headers"
 
 // Use Inter with expanded subset for better language support
 const inter = Inter({
@@ -43,6 +45,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     console.error("Error fetching challenge status:", error)
     // Continue with default values
   }
+
+  // Get the current path from headers
+  const headersList = headers()
+  const currentPath = headersList.get("x-pathname") || "/"
 
   return (
     <html lang="en" suppressHydrationWarning className={inter.variable}>
@@ -78,7 +84,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 
                 {/* Main content with flex-grow to push footer down */}
                 <main className="flex-grow">
-                  <ErrorBoundary>{children}</ErrorBoundary>
+                  <ErrorBoundary>
+                    {/* Wrap children in ProtectedLayout for auth checks */}
+                    <ProtectedLayout currentPath={currentPath}>{children}</ProtectedLayout>
+                  </ErrorBoundary>
                 </main>
 
                 {/* Footer always visible at the bottom */}

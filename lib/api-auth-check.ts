@@ -1,32 +1,31 @@
-import { type NextRequest, NextResponse } from "next/server"
-import { createServerSupabaseClient } from "@/lib/supabase-server"
-
-// Public API routes that don't require authentication
-const PUBLIC_API_ROUTES = ["/api/debug-auth-status", "/api/ensure-db-setup"]
+import { cookies } from "next/headers"
+import { NextResponse } from "next/server"
+import { isPublicRoute } from "./public-routes"
 
 /**
- * Lightweight authentication check for API routes
- * Much more efficient than middleware as it's only used when needed
+ * API route function to check authentication
+ * Use this in API routes that require authentication
  */
-export async function checkApiAuth(req: NextRequest) {
-  // Check if this is a public API route
-  const pathname = req.nextUrl.pathname
-  if (PUBLIC_API_ROUTES.some((route) => pathname.startsWith(route))) {
-    return null // No auth check needed
+export function checkApiAuth(currentPath: string) {
+  // Skip auth check for public routes
+  if (isPublicRoute(currentPath)) {
+    return true
   }
 
-  // Get the supabase client
-  const supabase = createServerSupabaseClient()
+  // Check for authentication
+  const cookieStore = cookies()
+  const authToken = cookieStore.get("sb-auth-token")
 
-  // Check if the user is authenticated
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
-
-  if (!session) {
-    return NextResponse.json({ error: "Unauthorized", message: "Authentication required" }, { status: 401 })
+  if (!authToken) {
+    return false
   }
 
-  // Return the session for use in the API route
-  return { session, supabase }
+  return true
+}
+
+/**
+ * Helper function to return unauthorized response
+ */
+export function unauthorizedResponse() {
+  return NextResponse.json({ error: "Unauthorized", message: "Authentication required" }, { status: 401 })
 }
