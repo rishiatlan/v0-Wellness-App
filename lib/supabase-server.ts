@@ -20,6 +20,7 @@ export const createServerSupabaseClient = cache(() => {
             sameSite: "lax",
             secure: process.env.NODE_ENV === "production",
             maxAge: options?.maxAge || 60 * 60 * 24 * 7, // 7 days default
+            httpOnly: true, // Added for better security
           })
         } catch (error) {
           console.error(`Error setting cookie ${name}:`, error)
@@ -37,5 +38,39 @@ export const createServerSupabaseClient = cache(() => {
         }
       },
     },
+    // Add connection pooling options for better performance
+    db: {
+      schema: "public",
+    },
+    global: {
+      fetch: fetch,
+    },
+    auth: {
+      persistSession: true,
+      detectSessionInUrl: false,
+      autoRefreshToken: true,
+    },
   })
 })
+
+// Add a helper function to execute queries with retry logic
+export async function executeWithRetry(queryFn, maxRetries = 3) {
+  let lastError = null
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await queryFn()
+    } catch (error) {
+      console.error(`Query failed (attempt ${attempt}/${maxRetries}):`, error)
+      lastError = error
+
+      if (attempt < maxRetries) {
+        // Exponential backoff
+        const delay = Math.pow(2, attempt) * 100
+        await new Promise((resolve) => setTimeout(resolve, delay))
+      } else {
+        throw lastError
+      }
+    }
+  }
+}

@@ -8,6 +8,23 @@ import { logAuthEvent } from "./auth-utils"
 // Re-export the isAtlanEmail function for backward compatibility
 export const isAtlanEmail = isAtlanEmailOriginal
 
+// Maximum number of retries for auth operations
+const MAX_RETRIES = 3
+const RETRY_DELAY = 1000 // 1 second
+
+// Helper function to implement retries
+async function withRetry<T>(operation: () => Promise<T>, retries = MAX_RETRIES, delay = RETRY_DELAY): Promise<T> {
+  try {
+    return await operation()
+  } catch (error) {
+    if (retries <= 0) throw error
+
+    console.log(`Retrying operation, ${retries} attempts left`)
+    await new Promise((resolve) => setTimeout(resolve, delay))
+    return withRetry(operation, retries - 1, delay * 1.5) // Exponential backoff
+  }
+}
+
 // Sign up with email and password
 export async function signUp(email: string, password: string, fullName: string) {
   if (!isAtlanEmail(email)) {
@@ -17,24 +34,26 @@ export async function signUp(email: string, password: string, fullName: string) 
   try {
     logAuthEvent("Attempting to sign up user", { email })
 
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
-        data: {
-          full_name: fullName,
+    return await withRetry(async () => {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
+          data: {
+            full_name: fullName,
+          },
         },
-      },
+      })
+
+      if (error) {
+        logAuthEvent("Supabase signup error", { error: error.message })
+        throw error
+      }
+
+      logAuthEvent("Signup successful", { userId: data.user?.id })
+      return data
     })
-
-    if (error) {
-      logAuthEvent("Supabase signup error", { error: error.message })
-      throw error
-    }
-
-    logAuthEvent("Signup successful", { userId: data.user?.id })
-    return data
   } catch (error: any) {
     logAuthEvent("Exception during signup", { error: error.message })
     throw new Error(error.message)
@@ -49,50 +68,42 @@ export async function signIn(email: string, password: string) {
     // Clear any existing sessions first to prevent conflicts
     await supabase.auth.signOut()
 
-    // Use signInWithPassword for email/password auth
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
+    return await withRetry(async () => {
+      // Use signInWithPassword for email/password auth
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
 
-    // Add this after the authentication attempt in the signIn function
-    console.log("Authentication response:", {
-      session: !!data.session,
-      user: !!data.user,
-      expiresAt: data.session?.expires_at,
-    })
+      if (error) {
+        logAuthEvent("Supabase auth error", { error: error.message })
 
-    if (error) {
-      logAuthEvent("Supabase auth error", { error: error.message })
-
-      // Check for specific error types to provide better user feedback
-      if (error.message.includes("Invalid login credentials")) {
-        throw new Error("Invalid email or password. Please try again.")
-      } else if (error.message.includes("Email not confirmed")) {
-        throw new Error("Please verify your email address before logging in.")
-      } else if (error.message.includes("rate limit")) {
-        throw new Error("Too many login attempts. Please try again later.")
-      } else {
-        // If using a VPN, this might be the issue
-        throw new Error("Authentication failed. If you're using a VPN, please try disabling it.")
+        // Check for specific error types to provide better user feedback
+        if (error.message.includes("Invalid login credentials")) {
+          throw new Error("Invalid email or password. Please try again.")
+        } else if (error.message.includes("Email not confirmed")) {
+          throw new Error("Please verify your email address before logging in.")
+        } else if (error.message.includes("rate limit")) {
+          throw new Error("Too many login attempts. Please try again later.")
+        } else {
+          // If using a VPN, this might be the issue
+          throw new Error("Authentication failed. If you're using a VPN, please try disabling it.")
+        }
       }
-    }
 
-    // Verify the session was created
-    if (!data.session) {
-      logAuthEvent("No session created after successful authentication")
-      throw new Error("Authentication succeeded but no session was created")
-    }
+      // Verify the session was created
+      if (!data.session) {
+        logAuthEvent("No session created after successful authentication")
+        throw new Error("Authentication succeeded but no session was created")
+      }
 
-    logAuthEvent("Authentication successful", {
-      email,
-      expiresAt: new Date(data.session.expires_at! * 1000).toLocaleString(),
+      logAuthEvent("Authentication successful", {
+        email,
+        expiresAt: new Date(data.session.expires_at! * 1000).toLocaleString(),
+      })
+
+      return data
     })
-
-    // Also log the redirect attempt
-    logAuthEvent("Attempting redirect after login", { callbackUrl: window.location.origin + "/daily-tracker" })
-
-    return data
   } catch (error: any) {
     logAuthEvent("Sign in function caught error", { error: error.message })
     throw new Error(error.message || "Authentication failed")
@@ -127,18 +138,20 @@ export async function resetPassword(email: string) {
   try {
     logAuthEvent("Password reset requested", { email })
 
-    // Update the redirectTo URL to match the exact path we've created
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/auth/reset-password/confirm`,
+    return await withRetry(async () => {
+      // Update the redirectTo URL to match the exact path we've created
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/auth/reset-password/confirm`,
+      })
+
+      if (error) {
+        logAuthEvent("Password reset error", { error: error.message })
+        throw error
+      }
+
+      logAuthEvent("Password reset email sent", { email })
+      return { success: true }
     })
-
-    if (error) {
-      logAuthEvent("Password reset error", { error: error.message })
-      throw error
-    }
-
-    logAuthEvent("Password reset email sent", { email })
-    return { success: true }
   } catch (error: any) {
     logAuthEvent("Exception during password reset", { error: error.message })
     throw new Error(error.message)
@@ -148,14 +161,16 @@ export async function resetPassword(email: string) {
 // Get user profile
 export async function getUserProfile(userId: string) {
   try {
-    const { data, error } = await supabase.from("users").select("*").eq("id", userId).maybeSingle()
+    return await withRetry(async () => {
+      const { data, error } = await supabase.from("users").select("*").eq("id", userId).maybeSingle()
 
-    if (error) {
-      logAuthEvent("Error fetching user profile", { error: error.message, userId })
-      throw error
-    }
+      if (error) {
+        logAuthEvent("Error fetching user profile", { error: error.message, userId })
+        throw error
+      }
 
-    return data
+      return data
+    })
   } catch (error: any) {
     logAuthEvent("Exception in getUserProfile", { error: error.message, userId })
     throw new Error(error.message)
@@ -184,14 +199,16 @@ export async function testSupabaseConnection() {
 // Get user profile - client safe version
 export async function getUserProfileClientSafe(userId: string) {
   try {
-    const { data, error } = await supabase.from("users").select("*").eq("id", userId).maybeSingle()
+    return await withRetry(async () => {
+      const { data, error } = await supabase.from("users").select("*").eq("id", userId).maybeSingle()
 
-    if (error) {
-      logAuthEvent("Error fetching user profile (client safe)", { error: error.message, userId })
-      throw error
-    }
+      if (error) {
+        logAuthEvent("Error fetching user profile (client safe)", { error: error.message, userId })
+        throw error
+      }
 
-    return data
+      return data
+    })
   } catch (error: any) {
     logAuthEvent("Exception in getUserProfile (client safe)", { error: error.message, userId })
     throw new Error(error.message)
@@ -200,12 +217,14 @@ export async function getUserProfileClientSafe(userId: string) {
 
 export async function isAuthenticated() {
   try {
-    const { data, error } = await supabase.auth.getSession()
-    if (error) {
-      logAuthEvent("Error checking authentication", { error: error.message })
-      return false
-    }
-    return !!data.session
+    return await withRetry(async () => {
+      const { data, error } = await supabase.auth.getSession()
+      if (error) {
+        logAuthEvent("Error checking authentication", { error: error.message })
+        return false
+      }
+      return !!data.session
+    })
   } catch (error: any) {
     logAuthEvent("Exception checking authentication", { error: error.message })
     return false

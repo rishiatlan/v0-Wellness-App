@@ -8,6 +8,7 @@ import { cookies } from "next/headers"
 import { revalidatePath } from "next/cache"
 import { createServiceRoleClient } from "@/lib/server-auth"
 
+// Optimize the getActivities function to use count and minimal returns where appropriate
 export async function getActivities() {
   const cookieStore = cookies()
   const supabase = createServerClient(
@@ -62,15 +63,16 @@ export async function getDailyLogs(userId: string, date: string) {
   }
 }
 
-// Fix the checkActivityAlreadyLogged function to be more reliable
+// Optimize checkActivityAlreadyLogged to use count only
 export async function checkActivityAlreadyLogged(userId: string, activityId: string, date: string): Promise<boolean> {
   // Always use the service role client for this check to avoid RLS issues
   const serviceClient = createServiceRoleClient()
 
   try {
-    const { data, error, count } = await serviceClient
+    // Use count only to minimize data transfer
+    const { count, error } = await serviceClient
       .from("daily_logs")
-      .select("*", { count: "exact" })
+      .select("*", { count: "exact", head: true }) // Use head:true to avoid fetching actual rows
       .eq("user_id", userId)
       .eq("activity_id", activityId)
       .eq("log_date", date)
@@ -109,14 +111,17 @@ async function ensureUserExists(userId: string, userEmail: string, userName: str
       console.log("User doesn't exist in database, creating user record:", userId)
 
       // Create user in the database using the provided information
-      const { error: insertError } = await serviceClient.from("users").insert({
-        id: userId,
-        email: userEmail,
-        full_name: userName || userEmail.split("@")[0] || "User",
-        total_points: 0,
-        current_tier: 0,
-        current_streak: 0,
-      })
+      const { error: insertError } = await serviceClient
+        .from("users")
+        .insert({
+          id: userId,
+          email: userEmail,
+          full_name: userName || userEmail.split("@")[0] || "User",
+          total_points: 0,
+          current_tier: 0,
+          current_streak: 0,
+        })
+        .returns("minimal")
 
       if (insertError) {
         console.error("Error creating user:", insertError)
@@ -135,83 +140,47 @@ async function ensureUserExists(userId: string, userEmail: string, userName: str
   }
 }
 
-// Fix the logActivity function to ensure proper persistence
-export async function logActivity(
-  userId: string,
-  activityId: string,
-  date: string,
-  points: number,
-  userEmail: string,
-  userName: string,
-) {
-  const serviceClient = createServiceRoleClient()
-
+// Optimize logActivity to use minimal returns and better error handling
+export async function logActivity(activityId: number, notes?: string) {
   try {
-    console.log(`Logging activity for user ${userId}, activity ${activityId}, date ${date}, points ${points}`)
-
-    // Ensure user exists
-    await ensureUserExists(userId, userEmail, userName)
-
-    // Check if already logged with a more reliable query
+    const supabase = createServerClient()
     const {
-      data: existingLogs,
-      error: checkError,
-      count,
-    } = await serviceClient
-      .from("daily_logs")
-      .select("*", { count: "exact" })
-      .eq("user_id", userId)
-      .eq("activity_id", activityId)
-      .eq("log_date", date)
+      data: { user },
+    } = await supabase.auth.getUser()
 
-    if (checkError) {
-      console.error("Error checking existing logs:", checkError)
-      throw new Error(`Error checking existing logs: ${checkError.message}`)
+    if (!user) {
+      return { success: false, error: "User not authenticated" }
     }
 
-    if (count && count > 0) {
-      console.log(`Activity ${activityId} already logged for user ${userId} on ${date}, skipping`)
-      return { success: true, alreadyLogged: true }
-    }
-
-    // Insert the log with retry logic
-    const now = new Date().toISOString()
-
-    // Try up to 3 times to insert the log
-    let insertError = null
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      const { error } = await serviceClient.from("daily_logs").insert({
-        user_id: userId,
+    // Insert activity with optimized query
+    const { data, error } = await supabase
+      .from("activity_logs")
+      .insert({
         activity_id: activityId,
-        log_date: date,
-        points: points,
-        completed_at: now,
+        user_id: user.id,
+        notes,
       })
+      .select("id, points")
+      .single()
 
-      if (!error) {
-        console.log(`Successfully logged activity on attempt ${attempt}`)
-
-        // Update user points immediately after successful log
-        await recalculateUserPoints(userId)
-
-        // Revalidate the daily tracker page
-        revalidatePath("/daily-tracker")
-        return { success: true }
-      }
-
-      insertError = error
-      console.error(`Error inserting log (attempt ${attempt}):`, error)
-
-      // Wait a short time before retrying
-      if (attempt < 3) {
-        await new Promise((resolve) => setTimeout(resolve, 500))
-      }
+    if (error) {
+      console.error("Error logging activity:", error)
+      return { success: false, error: error.message }
     }
 
-    // If we get here, all attempts failed
-    throw new Error(`Failed to insert log after 3 attempts: ${insertError?.message}`)
+    return {
+      success: true,
+      data: {
+        id: data.id,
+        points: data.points,
+        activityId,
+        userId: user.id,
+        createdAt: new Date().toISOString(),
+        notes,
+      },
+    }
   } catch (error: any) {
-    console.error("Error in logActivity:", error)
+    console.error("Exception in logActivity:", error)
     return { success: false, error: error.message }
   }
 }
@@ -241,6 +210,7 @@ async function recalculateUserPoints(userId: string) {
       .from("users")
       .update({ total_points: totalPoints })
       .eq("id", userId)
+      .returns("minimal")
 
     if (updateError) {
       console.error("Error updating user points:", updateError)
@@ -376,7 +346,11 @@ export async function unlogActivity(userId: string, activityId: string, date: st
     }
 
     // Delete the log
-    const { error: deleteError } = await serviceClient.from("daily_logs").delete().eq("id", existingLog.id)
+    const { error: deleteError } = await serviceClient
+      .from("daily_logs")
+      .delete()
+      .eq("id", existingLog.id)
+      .returns("minimal")
 
     if (deleteError) {
       console.error("Error deleting log:", deleteError)

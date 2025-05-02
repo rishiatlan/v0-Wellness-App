@@ -1,132 +1,152 @@
 "use client"
 
-import { createContext, useContext, useEffect, useState, useRef, type ReactNode } from "react"
+import type React from "react"
+import { useCallback, useEffect, useRef, useMemo } from "react"
+import { createContext, useContextSelector } from "use-context-selector"
 import type { Session, User } from "@supabase/supabase-js"
 import { supabase } from "./supabase-client"
 
-// Define the shape of our auth context
-type AuthContextType = {
+// Define the shape of the auth context
+interface AuthContextType {
   user: User | null
   session: Session | null
-  isLoading: boolean
+  loading: boolean
+  error: Error | null
   signOut: () => Promise<void>
-  refreshSession: () => Promise<void> // Add this function back
+  refreshSession: () => Promise<void>
 }
 
-// Create the context with default values
+// Create the auth context
 const AuthContext = createContext<AuthContextType>({
   user: null,
   session: null,
-  isLoading: true,
+  loading: true,
+  error: null,
   signOut: async () => {},
-  refreshSession: async () => {}, // Add default implementation
+  refreshSession: async () => {},
 })
 
-// Provider component that wraps the app and makes auth available
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null)
-  const [session, setSession] = useState<Session | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
-  const hasInitialized = useRef(false)
-  const authChangeProcessed = useRef(false)
+// Create a provider component
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  // Use refs for state to prevent unnecessary re-renders
+  const userRef = useRef<User | null>(null)
+  const sessionRef = useRef<Session | null>(null)
+  const loadingRef = useRef<boolean>(true)
+  const errorRef = useRef<Error | null>(null)
+  const authListenerRef = useRef<{ subscription: { unsubscribe: () => void } } | null>(null)
 
-  // Initialize auth state from Supabase
-  useEffect(() => {
-    // Skip on server-side rendering
-    if (typeof window === "undefined") return
-
-    // Prevent multiple initializations
-    if (hasInitialized.current) return
-    hasInitialized.current = true
-
-    // Get initial session
-    const initializeAuth = async () => {
-      try {
-        const { data } = await supabase.auth.getSession()
-
-        if (data.session) {
-          console.log("Initial session exists, expires at:", new Date(data.session.expires_at! * 1000).toLocaleString())
-          setUser(data.session.user)
-          setSession(data.session)
-        } else {
-          console.log("No initial session found")
-          setUser(null)
-          setSession(null)
-        }
-      } catch (error) {
-        console.error("Error getting initial session:", error)
-      } finally {
-        setIsLoading(false)
-      }
-    }
-
-    initializeAuth()
-
-    // Set up auth state change listener
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, newSession) => {
-      console.log("Auth state changed:", event)
-
-      // Prevent duplicate processing of the same auth event
-      if (authChangeProcessed.current && event === "SIGNED_IN") return
-      authChangeProcessed.current = true
-
-      if (newSession) {
-        setUser(newSession.user)
-        setSession(newSession)
-      } else {
-        setUser(null)
-        setSession(null)
+  // Function to refresh the session
+  const refreshSession = useCallback(async () => {
+    try {
+      loadingRef.current = true
+      const { data, error } = await supabase.auth.getSession()
+      if (error) {
+        throw error
       }
 
-      setIsLoading(false)
-    })
-
-    // Clean up subscription
-    return () => {
-      subscription.unsubscribe()
+      sessionRef.current = data.session
+      userRef.current = data.session?.user ?? null
+    } catch (err: any) {
+      console.error("Error refreshing session:", err)
+      errorRef.current = err
+    } finally {
+      loadingRef.current = false
     }
   }, [])
 
   // Sign out function
-  const signOut = async () => {
+  const signOut = useCallback(async () => {
     try {
       await supabase.auth.signOut()
-      setUser(null)
-      setSession(null)
-    } catch (error) {
-      console.error("Error signing out:", error)
+      userRef.current = null
+      sessionRef.current = null
+    } catch (err: any) {
+      console.error("Error signing out:", err)
+      errorRef.current = err
     }
-  }
+  }, [])
 
-  // Add refreshSession function
-  const refreshSession = async () => {
-    try {
-      setIsLoading(true)
-      const { data, error } = await supabase.auth.getSession()
+  // Initialize auth state
+  useEffect(() => {
+    // Set loading to true when the component mounts
+    loadingRef.current = true
 
-      if (error) {
-        console.error("Error refreshing session:", error)
-        return
+    // Get the initial session
+    refreshSession()
+
+    // Subscribe to auth changes - ensure we only have one listener
+    if (authListenerRef.current) {
+      authListenerRef.current.subscription.unsubscribe()
+    }
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, newSession) => {
+      console.log("Auth state changed:", event)
+
+      // Update refs directly to avoid unnecessary re-renders
+      sessionRef.current = newSession
+      userRef.current = newSession?.user ?? null
+      loadingRef.current = false
+    })
+
+    authListenerRef.current = authListener
+
+    // Clean up the subscription
+    return () => {
+      if (authListenerRef.current) {
+        authListenerRef.current.subscription.unsubscribe()
       }
-
-      setSession(data.session)
-      setUser(data.session?.user ?? null)
-    } catch (error) {
-      console.error("Exception refreshing session:", error)
-    } finally {
-      setIsLoading(false)
     }
-  }
+  }, [refreshSession])
 
-  // Provide auth context to children
-  return (
-    <AuthContext.Provider value={{ user, session, isLoading, signOut, refreshSession }}>
-      {children}
-    </AuthContext.Provider>
+  // Memoize the context value to prevent unnecessary re-renders
+  const value = useMemo(
+    () => ({
+      user: userRef.current,
+      session: sessionRef.current,
+      loading: loadingRef.current,
+      error: errorRef.current,
+      signOut,
+      refreshSession,
+    }),
+    [signOut, refreshSession],
   )
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 
-// Custom hook to use the auth context
-export const useAuth = () => useContext(AuthContext)
+// Create hooks to use the auth context with selectors for better performance
+export function useUser() {
+  return useContextSelector(AuthContext, (state) => state.user)
+}
+
+export function useSession() {
+  return useContextSelector(AuthContext, (state) => state.session)
+}
+
+export function useAuthLoading() {
+  return useContextSelector(AuthContext, (state) => state.loading)
+}
+
+export function useAuthError() {
+  return useContextSelector(AuthContext, (state) => state.error)
+}
+
+export function useSignOut() {
+  return useContextSelector(AuthContext, (state) => state.signOut)
+}
+
+export function useRefreshSession() {
+  return useContextSelector(AuthContext, (state) => state.refreshSession)
+}
+
+// Legacy hook for backward compatibility
+export function useAuth() {
+  const user = useUser()
+  const session = useSession()
+  const loading = useAuthLoading()
+  const error = useAuthError()
+  const signOut = useSignOut()
+  const refreshSession = useRefreshSession()
+
+  return { user, session, loading, error, signOut, refreshSession }
+}

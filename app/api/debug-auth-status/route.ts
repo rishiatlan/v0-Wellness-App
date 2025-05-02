@@ -1,46 +1,65 @@
 import { NextResponse } from "next/server"
 import { cookies } from "next/headers"
-import { createClient } from "@supabase/supabase-js"
+import { createServerClient } from "@supabase/ssr"
 
 export async function GET() {
-  const cookieStore = cookies()
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ""
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
-
-  // Get all cookies for debugging
-  const allCookies = cookieStore.getAll()
-  const cookieNames = allCookies.map((c) => c.name)
-
-  // Check for auth cookie
-  const authCookie = cookieStore.get("sb-auth-token")
-
-  // Create a temporary Supabase client
-  const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
-    },
-  })
-
-  // Try to get session from cookie
-  let sessionData = null
-  let sessionError = null
-
   try {
-    const { data, error } = await supabase.auth.getSession()
-    sessionData = data
-    sessionError = error
-  } catch (err) {
-    sessionError = err
-  }
+    const cookieStore = cookies()
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get: (name) => cookieStore.get(name)?.value,
+          set: (name, value, options) => cookieStore.set({ name, value, ...options }),
+          remove: (name, options) => cookieStore.set({ name, value: "", ...options, maxAge: 0 }),
+        },
+      },
+    )
 
-  return NextResponse.json({
-    timestamp: new Date().toISOString(),
-    cookieExists: !!authCookie,
-    cookieNames,
-    sessionExists: !!sessionData?.session,
-    sessionError: sessionError ? String(sessionError) : null,
-    userExists: !!sessionData?.session?.user,
-    expiresAt: sessionData?.session?.expires_at ? new Date(sessionData.session.expires_at * 1000).toISOString() : null,
-  })
+    // Get session
+    const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
+
+    // Get user if session exists
+    let userData = null
+    let userError = null
+
+    if (sessionData?.session) {
+      const userResult = await supabase.auth.getUser()
+      userData = userResult.data
+      userError = userResult.error
+    }
+
+    // Get cookies for debugging
+    const authCookies = {}
+    for (const cookie of cookieStore.getAll()) {
+      if (cookie.name.includes("supabase") || cookie.name.includes("auth")) {
+        authCookies[cookie.name] = `${cookie.value.substring(0, 10)}... (expires: ${cookie.expires || "session"})`
+      }
+    }
+
+    return NextResponse.json({
+      timestamp: new Date().toISOString(),
+      session: {
+        exists: !!sessionData?.session,
+        expiresAt: sessionData?.session?.expires_at
+          ? new Date(sessionData.session.expires_at * 1000).toISOString()
+          : null,
+        error: sessionError?.message || null,
+      },
+      user: {
+        exists: !!userData?.user,
+        email: userData?.user?.email || null,
+        error: userError?.message || null,
+      },
+      cookies: authCookies,
+      environment: {
+        supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL ? "Set" : "Missing",
+        supabaseAnonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ? "Set" : "Missing",
+      },
+    })
+  } catch (error) {
+    console.error("Error in debug-auth-status route:", error)
+    return NextResponse.json({ error: "Failed to get auth status" }, { status: 500 })
+  }
 }

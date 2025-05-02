@@ -102,6 +102,27 @@ export async function getDailyLogsClientSafe(userId: string, date: string) {
   }
 }
 
+// Implement exponential backoff for API calls
+async function withBackoff(fn, maxRetries = 3, initialDelay = 300) {
+  let retries = 0
+
+  const execute = async () => {
+    try {
+      return await fn()
+    } catch (error) {
+      if (retries >= maxRetries) throw error
+
+      const delay = initialDelay * Math.pow(2, retries)
+      retries++
+      console.log(`API call failed, retrying in ${delay}ms (attempt ${retries} of ${maxRetries})`)
+      await new Promise((resolve) => setTimeout(resolve, delay))
+      return execute()
+    }
+  }
+
+  return execute()
+}
+
 export async function toggleActivityClientSafe(
   userId: string,
   activityId: string,
@@ -119,12 +140,14 @@ export async function toggleActivityClientSafe(
       throw new Error("This activity has already been logged today")
     }
 
-    // If not already logged, proceed with logging
-    const result = await toggleActivityClient(userId, activityId, date, points, userEmail, userName)
+    // If not already logged, proceed with logging with backoff
+    const result = await withBackoff(() => toggleActivityClient(userId, activityId, date, points, userEmail, userName))
 
     // Invalidate relevant caches
     cache.delete(`daily_logs_${userId}_${date}`)
     cache.delete(`activity_logged_${userId}_${activityId}_${date}`)
+    cache.delete(`user_profile_${userId}`)
+    cache.delete(`today_points_${userId}_${date}`)
 
     return result
   } catch (error) {
@@ -171,7 +194,7 @@ export async function getUserProfileClientSafe(userId: string) {
 
 export async function updateUserStreakClientSafe(userId: string) {
   try {
-    const result = await updateUserStreakClient(userId)
+    const result = await withBackoff(() => updateUserStreakClient(userId))
 
     // Invalidate user profile cache
     cache.delete(`user_profile_${userId}`)
@@ -187,7 +210,7 @@ export async function recalculateUserStreakClientSafe(userId: string) {
   try {
     // Use the server action
     const { recalculateUserStreak } = await import("@/app/actions/streak-actions")
-    const result = await recalculateUserStreak(userId)
+    const result = await withBackoff(() => recalculateUserStreak(userId))
 
     // Invalidate user profile cache
     cache.delete(`user_profile_${userId}`)
@@ -227,7 +250,7 @@ export async function getActivityHistoryClientSafe(userId: string, days = 14) {
 export async function recalculateUserPointsClientSafe(userId: string) {
   try {
     const { recalculateUserPoints } = await import("@/app/actions/user-actions")
-    const result = await recalculateUserPoints(userId)
+    const result = await withBackoff(() => recalculateUserPoints(userId))
 
     // Invalidate user profile cache
     cache.delete(`user_profile_${userId}`)
@@ -275,7 +298,7 @@ export async function getTodayPointsClientSafe(userId: string, localDate: string
 export async function createDefaultActivitiesClientSafe(userId: string, activities: any[]) {
   try {
     const { createDefaultActivities } = await import("@/app/actions/activity-actions")
-    const result = await createDefaultActivities(userId, activities)
+    const result = await withBackoff(() => createDefaultActivities(userId, activities))
 
     // Invalidate activities cache
     cache.delete("activities")
@@ -337,4 +360,18 @@ export function clearUserCaches(userId: string) {
     }
   }
   console.log(`Caches cleared for user ${userId}`)
+}
+
+// Add a function to batch multiple API calls
+export async function batchApiCalls(calls: (() => Promise<any>)[]) {
+  return Promise.all(
+    calls.map((call) => {
+      try {
+        return call()
+      } catch (error) {
+        console.error("Error in batched API call:", error)
+        return null
+      }
+    }),
+  )
 }

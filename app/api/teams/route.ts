@@ -53,7 +53,16 @@ export async function GET() {
     }
 
     console.log(`Successfully fetched ${teamsWithMembers.length} teams`)
-    return NextResponse.json({ teams: teamsWithMembers })
+
+    // Add cache headers for performance
+    return NextResponse.json(
+      { teams: teamsWithMembers },
+      {
+        headers: {
+          "Cache-Control": "public, s-maxage=60, stale-while-revalidate=30",
+        },
+      },
+    )
   } catch (error) {
     console.error("Exception in teams API route:", error)
     return NextResponse.json({ error: "Failed to fetch teams", details: error.message }, { status: 500 })

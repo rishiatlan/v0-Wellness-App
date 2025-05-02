@@ -1,7 +1,6 @@
 import type React from "react"
-import type { Metadata } from "next"
-import { Inter } from "next/font/google"
 import "./globals.css"
+import { Inter } from "next/font/google"
 import { ThemeProvider } from "@/components/theme-provider"
 import { AuthProvider } from "@/lib/auth-context"
 import { Toaster } from "@/components/ui/toaster"
@@ -9,9 +8,11 @@ import { PreLaunchBanner } from "@/components/pre-launch-banner"
 import { getChallengeStatus } from "@/app/actions/challenge-actions"
 import Header from "@/components/header"
 import Footer from "@/components/footer"
+import { AssetPreloader } from "@/components/asset-preloader"
 import { AppInitializer } from "@/components/app-initializer"
-import { APP_URL } from "@/lib/env-vars"
-import { ClientOnly } from "@/components/client-only"
+import { APP_VERSION, APP_URL } from "@/lib/env-vars"
+import { ErrorBoundary } from "@/components/error-boundary"
+import { PerformanceMonitor } from "@/components/performance-monitor"
 
 // Use Inter with expanded subset for better language support
 const inter = Inter({
@@ -20,17 +21,13 @@ const inter = Inter({
   variable: "--font-inter",
 })
 
-export const metadata: Metadata = {
+export const metadata = {
   title: "Spring into Wellness",
   description: "Atlan's Spring Wellness Challenge - Track your daily wellness activities and compete with colleagues",
-    generator: 'v0.dev'
-}
-
-// Separate viewport export to fix Next.js metadata warning
-export const viewport = {
-  width: "device-width",
-  initialScale: 1,
+  viewport: "width=device-width, initial-scale=1",
   themeColor: "#0c1425",
+  version: APP_VERSION,
+    generator: 'v0.dev'
 }
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
@@ -56,40 +53,41 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           href={process.env.NEXT_PUBLIC_SUPABASE_URL || "https://mqvcdyzqegzqfwvesoiz.supabase.co"}
         />
 
+        {/* Fix image preloading issues with crossOrigin */}
+        <link rel="preload" href="/wellness.png" as="image" crossOrigin="anonymous" />
+
+        {/* Preload other common assets */}
+        <link rel="preload" href="/abstract-geometric-logo.png" as="image" crossOrigin="anonymous" />
+
         {/* Add canonical URL */}
         <link rel="canonical" href={APP_URL} />
-
-        {/* Preload critical assets with proper attributes */}
-        <link rel="preload" as="image" href="/wellness.png" crossOrigin="anonymous" />
-        <link rel="preload" as="image" href="/wellness-logo.png" crossOrigin="anonymous" />
-        <link rel="preload" as="image" href="/abstract-geometric-logo.png" crossOrigin="anonymous" />
       </head>
       <body className={`${inter.className} min-h-screen flex flex-col`}>
-        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
-          <AuthProvider>
-            <AppInitializer />
-            <div className="min-h-screen flex flex-col">
-              {/* Wrap components that might cause hydration mismatches */}
-              <ClientOnly>
+        <PerformanceMonitor />
+        <ErrorBoundary>
+          <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
+            <AssetPreloader />
+            <AuthProvider>
+              <AppInitializer />
+              <div className="min-h-screen flex flex-col">
+                {/* Header is now always visible on all pages */}
                 <Header />
-              </ClientOnly>
 
-              {/* Show pre-launch banner if challenge hasn't started */}
-              <ClientOnly>
+                {/* Show pre-launch banner if challenge hasn't started */}
                 <PreLaunchBanner launchDate={startDate} isChallengeLive={started} />
-              </ClientOnly>
 
-              {/* Main content with flex-grow to push footer down */}
-              <main className="flex-grow">{children}</main>
+                {/* Main content with flex-grow to push footer down */}
+                <main className="flex-grow">
+                  <ErrorBoundary>{children}</ErrorBoundary>
+                </main>
 
-              {/* Footer always visible at the bottom */}
-              <ClientOnly>
+                {/* Footer always visible at the bottom */}
                 <Footer />
-              </ClientOnly>
-            </div>
-            <Toaster />
-          </AuthProvider>
-        </ThemeProvider>
+              </div>
+              <Toaster />
+            </AuthProvider>
+          </ThemeProvider>
+        </ErrorBoundary>
       </body>
     </html>
   )

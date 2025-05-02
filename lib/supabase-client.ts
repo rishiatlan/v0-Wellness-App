@@ -1,50 +1,91 @@
 import { createClient } from "@supabase/supabase-js"
 import type { Database } from "@/types/supabase"
 
-// Create a safe global variable that works in both browser and server
-const getGlobalThis = () => {
-  if (typeof globalThis !== "undefined") return globalThis
-  if (typeof window !== "undefined") return window
-  if (typeof global !== "undefined") return global
-  if (typeof self !== "undefined") return self
-  throw new Error("Unable to locate global object")
+// Environment variables
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  console.error("Missing Supabase environment variables!")
 }
 
-// Unique key for storing the Supabase client instance
-const GLOBAL_SUPABASE_CLIENT_KEY = "__SPRING_WELLNESS_SUPABASE_CLIENT"
-
-// Type for our singleton
-type SupabaseClientSingleton = ReturnType<typeof createClient<Database>>
-
-// Get the global object safely
-const globalObj = getGlobalThis() as unknown as {
-  [GLOBAL_SUPABASE_CLIENT_KEY]?: SupabaseClientSingleton
-}
+// Create a singleton instance
+let supabaseInstance: ReturnType<typeof createClient<Database>> | null = null
 
 // Create a singleton Supabase client for the entire app
-export const supabase = (() => {
-  // Return existing instance if available
-  if (globalObj[GLOBAL_SUPABASE_CLIENT_KEY]) {
-    return globalObj[GLOBAL_SUPABASE_CLIENT_KEY] as SupabaseClientSingleton
-  }
+const createSingletonClient = () => {
+  if (supabaseInstance) return supabaseInstance
 
-  // Create new instance if one doesn't exist
-  const client = createClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      auth: {
-        persistSession: true,
-        storageKey: "sb-spring-wellness-auth-token",
+  supabaseInstance = createClient<Database>(supabaseUrl || "", supabaseAnonKey || "", {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+      storageKey: "supabase-auth-token",
+      flowType: "pkce",
+      debug: process.env.NODE_ENV !== "production",
+      cookieOptions: {
+        name: "sb-auth-token",
+        lifetime: 60 * 60 * 24 * 7, // 7 days
+        domain: "",
+        path: "/",
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
+        httpOnly: true, // Added httpOnly flag for better security
       },
     },
-  )
+  })
 
-  // Store the client in our global object
-  globalObj[GLOBAL_SUPABASE_CLIENT_KEY] = client
+  return supabaseInstance
+}
 
-  return client
-})()
+// Export as a singleton to prevent multiple instances
+export const supabase = createSingletonClient()
 
-// Export a type for the Supabase client
-export type SupabaseClient = typeof supabase
+// Initialize and test connection with retry logic
+if (typeof window !== "undefined") {
+  // Only run in browser environment
+  let sessionInitAttempts = 0
+
+  const initSession = () => {
+    supabase.auth.getSession().then(({ data, error }) => {
+      if (error) {
+        console.error("Error getting initial session:", error)
+        if (sessionInitAttempts < 3) {
+          sessionInitAttempts++
+          console.log(`Retrying session fetch (attempt ${sessionInitAttempts})...`)
+          setTimeout(initSession, 1000) // Retry after 1 second
+        }
+      } else if (data.session) {
+        console.log("Initial session exists, expires at:", new Date(data.session.expires_at! * 1000).toLocaleString())
+      } else {
+        console.log("No initial session found")
+        if (sessionInitAttempts < 3) {
+          sessionInitAttempts++
+          console.log(`Retrying session fetch (attempt ${sessionInitAttempts})...`)
+          setTimeout(initSession, 1000) // Retry after 1 second
+        }
+      }
+    })
+  }
+
+  initSession()
+
+  // Add auth state change listener for debugging
+  supabase.auth.onAuthStateChange((event, session) => {
+    console.log(`Auth state changed: ${event}`, session ? "Session exists" : "No session")
+
+    // Retry session fetch if initial attempt failed
+    if (event === "INITIAL_SESSION" && !session) {
+      setTimeout(() => {
+        console.log("Retrying session fetch after INITIAL_SESSION event...")
+        supabase.auth.getSession()
+      }, 500)
+    }
+  })
+}
+
+// Export a function to get a fresh client if needed
+export function getSupabaseClient() {
+  return supabase
+}

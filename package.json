@@ -60,6 +60,8 @@
     "zod": "^3.24.1",
     "@supabase/supabase-js": "latest",
     "@emotion/is-prop-valid": "latest",
+    "@tanstack/react-query": "latest",
+    "scheduler": "latest",
     "@supabase/auth-helpers-nextjs": "latest",
     "fs": "latest",
     "path": "latest",
@@ -67,7 +69,9 @@
     "@supabase/ssr": "latest",
     "canvas-confetti": "latest",
     "framer-motion": "latest",
-    "@tailwindcss/typography": "latest"
+    "@tailwindcss/typography": "latest",
+    "@tanstack/react-query-devtools": "latest",
+    "use-context-selector": "latest"
   },
   "devDependencies": {
     "@types/node": "^22",

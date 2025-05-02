@@ -1,19 +1,24 @@
 {
-  "name": "Atlan Spring into Wellness",
+  "name": "Spring Wellness App",
   "short_name": "Wellness",
+  "description": "Track your wellness activities and compete with your team",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#4f46e5",
+  "orientation": "portrait",
   "icons": [
     {
       "src": "/android-chrome-192x192.png",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     },
     {
       "src": "/android-chrome-512x512.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     }
-  ],
-  "theme_color": "#1cb0b5",
-  "background_color": "#ffffff",
-  "display": "standalone"
+  ]
 }

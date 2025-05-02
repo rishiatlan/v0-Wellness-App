@@ -9,6 +9,7 @@ import Image from "next/image"
 import { cn } from "@/lib/utils"
 import { useMobile } from "@/hooks/use-mobile"
 import { useAuth } from "@/lib/auth-context"
+import { signOut } from "@/lib/auth"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,11 +19,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { OptimizedAvatar } from "@/components/optimized-avatar"
-import { useEffect, useState, useRef } from "react" // Added useRef
+import { useEffect, useState } from "react"
 import { isAdmin } from "@/lib/admin-utils"
 import { Badge } from "@/components/ui/badge"
 import { getUserTeam } from "@/app/actions/team-actions"
-import { ClientOnly } from "@/components/client-only"
 
 const getNavigation = (userEmail) => {
   const baseNavigation = [
@@ -44,13 +44,12 @@ const getNavigation = (userEmail) => {
 export default function Header() {
   const pathname = usePathname()
   const isMobile = useMobile()
-  const { user, isLoading, refreshSession, signOut } = useAuth()
+  const { user, loading, refreshSession } = useAuth()
   const [imageError, setImageError] = useState(false)
   const [retryCount, setRetryCount] = useState(0)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [userTeam, setUserTeam] = useState<any>(null)
   const [loadingTeam, setLoadingTeam] = useState(false)
-  const hasRefreshed = useRef(false) // Add ref to track if we've already refreshed
 
   // Define multiple possible logo URLs
   const logoUrls = ["/wellness.png", "/wellness-logo.png", "/abstract-geometric-logo.png"]
@@ -59,23 +58,17 @@ export default function Header() {
   const logoUrl = logoUrls[currentLogoIndex]
 
   // Refresh session when header mounts to ensure we have the latest auth state
-  // But only do it once to prevent infinite refreshes
   useEffect(() => {
     const doRefresh = async () => {
-      if (hasRefreshed.current) return // Skip if we've already refreshed
-
       try {
-        hasRefreshed.current = true // Mark as refreshed before the async call
-        console.log("Refreshing session in header...")
         await refreshSession()
-        console.log("Session refresh complete")
       } catch (error) {
         console.error("Error refreshing session:", error)
       }
     }
 
     doRefresh()
-  }, [refreshSession]) // Only depends on refreshSession function reference
+  }, [refreshSession])
 
   // Fetch user's team information
   useEffect(() => {
@@ -96,7 +89,7 @@ export default function Header() {
     if (user?.id) {
       fetchUserTeam()
     }
-  }, [user?.id]) // Only depends on user.id
+  }, [user?.id])
 
   // Handle logo loading error
   const handleLogoError = () => {
@@ -122,7 +115,7 @@ export default function Header() {
   const handleSignOut = async () => {
     try {
       await signOut()
-      // Redirect will be handled by the auth context
+      // The signOut function now handles the redirect
     } catch (error) {
       console.error("Error signing out:", error)
     }
@@ -236,7 +229,7 @@ export default function Header() {
             </SheetTrigger>
             <SheetContent side="right" className="border-navy-800 bg-navy-950 text-white">
               <div className="grid gap-2 py-6">
-                {user && !isLoading && (
+                {user && !loading && (
                   <div className="mb-4 flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <OptimizedAvatar
@@ -334,93 +327,91 @@ export default function Header() {
         )}
 
         <div className="flex items-center gap-2">
-          {!isLoading && user && (
+          {!loading && user && (
             <div className="hidden md:block mr-2">
               <TeamBadge />
             </div>
           )}
 
-          <ClientOnly>
-            {!isLoading && (
-              <>
-                {user ? (
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="rounded-full">
-                        <OptimizedAvatar
-                          userId={user.id}
-                          email={user.email}
-                          name={user.user_metadata?.full_name}
-                          priority={true}
-                        />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="border-navy-800 bg-navy-900 text-white w-56">
-                      <DropdownMenuLabel className="font-normal">
-                        <div className="flex flex-col space-y-1">
-                          <p className="text-sm font-medium leading-none">
-                            {user.user_metadata?.full_name || user.email?.split("@")[0]}
-                          </p>
-                          <p className="text-xs leading-none text-slate-400">{user.email}</p>
-                        </div>
-                      </DropdownMenuLabel>
-
-                      {/* Team information section */}
-                      <DropdownMenuSeparator className="bg-navy-800" />
-                      <div className="px-2 py-1.5">
-                        <div className="text-xs text-slate-400 mb-1">Team</div>
-                        {loadingTeam ? (
-                          <div className="animate-pulse h-6 bg-navy-800 rounded"></div>
-                        ) : userTeam ? (
-                          <div className="flex items-center justify-between">
-                            <div className="text-sm font-medium">{userTeam.name}</div>
-                            <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" asChild>
-                              <Link href="/team-challenge">View</Link>
-                            </Button>
-                          </div>
-                        ) : (
-                          <div className="flex items-center justify-between">
-                            <div className="text-sm text-yellow-400">No team joined</div>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 px-2 text-xs bg-blue-900/30 hover:bg-blue-900/50"
-                              asChild
-                            >
-                              <Link href="/team-challenge">Join Team</Link>
-                            </Button>
-                          </div>
-                        )}
+          {!loading && (
+            <>
+              {user ? (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" className="rounded-full">
+                      <OptimizedAvatar
+                        userId={user.id}
+                        email={user.email}
+                        name={user.user_metadata?.full_name}
+                        priority={true}
+                      />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="border-navy-800 bg-navy-900 text-white w-56">
+                    <DropdownMenuLabel className="font-normal">
+                      <div className="flex flex-col space-y-1">
+                        <p className="text-sm font-medium leading-none">
+                          {user.user_metadata?.full_name || user.email?.split("@")[0]}
+                        </p>
+                        <p className="text-xs leading-none text-slate-400">{user.email}</p>
                       </div>
+                    </DropdownMenuLabel>
 
-                      <DropdownMenuSeparator className="bg-navy-800" />
-                      <DropdownMenuItem asChild className="hover:bg-navy-800 focus:bg-navy-800">
-                        <Link href="/profile" className="cursor-pointer">
-                          <User className="mr-2 h-4 w-4" />
-                          Profile
-                        </Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={handleSignOut}
-                        className="hover:bg-navy-800 focus:bg-navy-800 cursor-pointer"
-                      >
-                        <LogOut className="mr-2 h-4 w-4" />
-                        Sign Out
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                ) : (
-                  <Button
-                    size="sm"
-                    asChild
-                    className="bg-gradient-to-r from-teal-500 to-blue-500 hover:from-teal-600 hover:to-blue-600 font-medium"
-                  >
-                    <Link href="/auth/login">Log In</Link>
-                  </Button>
-                )}
-              </>
-            )}
-          </ClientOnly>
+                    {/* Team information section */}
+                    <DropdownMenuSeparator className="bg-navy-800" />
+                    <div className="px-2 py-1.5">
+                      <div className="text-xs text-slate-400 mb-1">Team</div>
+                      {loadingTeam ? (
+                        <div className="animate-pulse h-6 bg-navy-800 rounded"></div>
+                      ) : userTeam ? (
+                        <div className="flex items-center justify-between">
+                          <div className="text-sm font-medium">{userTeam.name}</div>
+                          <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" asChild>
+                            <Link href="/team-challenge">View</Link>
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-between">
+                          <div className="text-sm text-yellow-400">No team joined</div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 text-xs bg-blue-900/30 hover:bg-blue-900/50"
+                            asChild
+                          >
+                            <Link href="/team-challenge">Join Team</Link>
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+
+                    <DropdownMenuSeparator className="bg-navy-800" />
+                    <DropdownMenuItem asChild className="hover:bg-navy-800 focus:bg-navy-800">
+                      <Link href="/profile" className="cursor-pointer">
+                        <User className="mr-2 h-4 w-4" />
+                        Profile
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={handleSignOut}
+                      className="hover:bg-navy-800 focus:bg-navy-800 cursor-pointer"
+                    >
+                      <LogOut className="mr-2 h-4 w-4" />
+                      Sign Out
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              ) : (
+                <Button
+                  size="sm"
+                  asChild
+                  className="bg-gradient-to-r from-teal-500 to-blue-500 hover:from-teal-600 hover:to-blue-600 font-medium"
+                >
+                  <Link href="/auth/login">Log In</Link>
+                </Button>
+              )}
+            </>
+          )}
         </div>
       </div>
     </header>
