@@ -1,87 +1,71 @@
+"use server"
+
 import { createClient } from "@supabase/supabase-js"
-import type { Database } from "@/types/supabase"
+import { cookies } from "next/headers"
 
-// Create a Supabase client with the service role key for admin operations
-export function createServiceRoleClient() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+// Create a Supabase client for server-side use
+export async function createServerSupabaseClient() {
+  const cookieStore = cookies()
 
-  if (!supabaseUrl || !supabaseServiceKey) {
-    console.error("Missing Supabase service role credentials")
-    throw new Error("Server configuration error: Missing Supabase service role credentials")
-  }
-
-  return createClient<Database>(supabaseUrl, supabaseServiceKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
+  return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
+    cookies: {
+      get: (name) => cookieStore.get(name)?.value,
+      set: (name, value, options) => cookieStore.set(name, value, options),
+      remove: (name, options) => cookieStore.set(name, "", { ...options, maxAge: 0 }),
     },
   })
 }
 
-// Initialize user profile in the database with retry mechanism
-export async function initializeUserProfile(userId: string, email: string, fullName?: string) {
-  console.log(`Initializing user profile for ${email} (${userId})`)
+// Create a Supabase client with service role for admin operations
+export async function createServiceRoleClient() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
-  const supabase = createServiceRoleClient()
-  let retries = 3
+  if (!supabaseUrl || !supabaseServiceKey) {
+    throw new Error("Missing Supabase environment variables")
+  }
 
-  while (retries > 0) {
-    try {
-      // Check if user already exists in the database
-      const { data: existingUser, error: checkError } = await supabase
-        .from("users")
-        .select("id")
-        .eq("id", userId)
-        .maybeSingle()
+  return createClient(supabaseUrl, supabaseServiceKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+    },
+  })
+}
 
-      if (checkError) {
-        console.error("Error checking if user exists:", checkError)
-        throw new Error("Failed to check if user exists")
-      }
+export async function initializeUserProfile(userId: string, email: string, fullName: string) {
+  const serviceClient = await createServiceRoleClient()
 
-      // If user doesn't exist, create them
-      if (!existingUser) {
-        console.log(`User ${userId} doesn't exist in database, creating user record`)
+  try {
+    // Check if user already exists
+    const { data: existingUser } = await serviceClient.from("users").select("*").eq("id", userId).maybeSingle()
 
-        // Create user in the database using the provided information
-        const { error: insertError } = await supabase.from("users").insert({
-          id: userId,
-          email: email,
-          full_name: fullName || email.split("@")[0] || "User",
-          total_points: 0,
-          current_tier: 0,
-          current_streak: 0,
-        })
-
-        if (insertError) {
-          console.error("Error creating user:", insertError)
-
-          // If it's a unique constraint violation, the user might have been created in a race condition
-          if (insertError.code === "23505") {
-            console.log("User profile appears to have been created in a race condition, considering successful")
-            return true
-          }
-
-          throw new Error("Failed to create user profile")
-        }
-
-        console.log(`User profile created successfully for ${email}`)
-      } else {
-        console.log(`User ${userId} already exists in database`)
-      }
-
-      return true
-    } catch (error: any) {
-      retries--
-      console.error(`Error in initializeUserProfile (${retries} retries left):`, error)
-
-      if (retries <= 0) {
-        throw new Error(`Failed to initialize user profile after multiple attempts: ${error.message}`)
-      }
-
-      // Wait before retrying
-      await new Promise((resolve) => setTimeout(resolve, 1000))
+    if (existingUser) {
+      return existingUser
     }
+
+    // Create the user profile
+    const { data, error } = await serviceClient
+      .from("users")
+      .insert({
+        id: userId,
+        email: email,
+        full_name: fullName || email.split("@")[0] || "User",
+        total_points: 0,
+        current_tier: 0,
+        current_streak: 0,
+      })
+      .select()
+      .single()
+
+    if (error) {
+      console.error("Error creating user profile:", error)
+      throw new Error("Unable to create user profile")
+    }
+
+    return data
+  } catch (error: any) {
+    console.error("Error in createUserProfile:", error)
+    throw new Error(`Error creating user profile: ${error.message}`)
   }
 }

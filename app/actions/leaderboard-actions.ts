@@ -1,202 +1,128 @@
 "use server"
 
-import { createServerSupabaseClient } from "@/lib/supabase-server"
-import { cookies } from "next/headers"
-import { createClient } from "@supabase/supabase-js"
-import { createClient as createAdminClient } from "@/lib/supabase-admin"
+import { createServiceRoleClient } from "@/lib/server-auth"
 import { generateNameFromEmail } from "@/lib/utils"
 
-/**
- * Get individual leaderboard data
- * This function can be called without authentication
- */
-export async function getIndividualLeaderboard() {
+export async function getLeaderboardData(limit = 100) {
   try {
-    const supabase = createServerSupabaseClient()
+    const serviceClient = await createServiceRoleClient()
 
-    // Query for individual leaderboard data
-    const { data, error } = await supabase
+    // Get top users by points
+    const { data: users, error } = await serviceClient
       .from("users")
-      .select("id, full_name, email, avatar_url, total_points, current_tier")
+      .select("id, full_name, email, total_points, current_tier, avatar_url")
       .order("total_points", { ascending: false })
-      .limit(50)
+      .limit(limit)
+
+    if (error) {
+      console.error("Error fetching leaderboard data:", error)
+      return { success: false, error: "Failed to fetch leaderboard data" }
+    }
+
+    // Format the data for display
+    const formattedUsers = users.map((user, index) => ({
+      rank: index + 1,
+      id: user.id,
+      full_name: user.full_name || generateNameFromEmail(user.email),
+      email: user.email,
+      total_points: user.total_points,
+      current_tier: user.current_tier,
+      avatar_url: user.avatar_url,
+    }))
+
+    return { success: true, data: formattedUsers }
+  } catch (error: any) {
+    console.error("Error in getLeaderboardData:", error)
+    return { success: false, error: error.message }
+  }
+}
+
+export async function getIndividualLeaderboard(limit = 100) {
+  try {
+    const serviceClient = await createServiceRoleClient()
+
+    const { data, error } = await serviceClient
+      .from("users")
+      .select("id, full_name, email, total_points, current_tier, avatar_url")
+      .order("total_points", { ascending: false })
+      .limit(limit)
 
     if (error) {
       console.error("Error fetching individual leaderboard:", error)
       return []
     }
 
-    // Ensure all users have names and add rank to each user
-    return (data || []).map((user, index) => ({
-      ...user,
-      full_name: user.full_name || generateNameFromEmail(user.email),
-      rank: index + 1,
-      badge: index < 3 ? ["🥇", "🥈", "🥉"][index] : null,
-    }))
-  } catch (error) {
+    return data || []
+  } catch (error: any) {
     console.error("Error in getIndividualLeaderboard:", error)
     return []
   }
 }
 
-/**
- * Get team leaderboard data
- * This function can be called without authentication
- */
-export async function getTeamLeaderboard() {
+export async function getTeamLeaderboard(limit = 20) {
   try {
-    const supabase = createServerSupabaseClient()
+    const serviceClient = await createServiceRoleClient()
 
-    // Get teams with total points
-    const { data: teams, error: teamsError } = await supabase
+    const { data, error } = await serviceClient
       .from("teams")
       .select("id, name, total_points, banner_url")
       .order("total_points", { ascending: false })
-      .limit(20)
+      .limit(limit)
 
-    if (teamsError) {
-      console.error("Error fetching team leaderboard:", teamsError)
+    if (error) {
+      console.error("Error fetching team leaderboard:", error)
       return []
     }
 
-    // For each team, get the count of members and calculate average points
-    const teamsWithDetails = await Promise.all(
-      (teams || []).map(async (team) => {
-        // Get member count
-        const { count, error: countError } = await supabase
-          .from("users")
-          .select("id", { count: "exact" })
-          .eq("team_id", team.id)
-
-        if (countError) {
-          console.error("Error getting team member count:", countError)
-        }
-
-        // Get all team members to calculate average points
-        const { data: members, error: membersError } = await supabase
-          .from("users")
-          .select("total_points")
-          .eq("team_id", team.id)
-
-        if (membersError) {
-          console.error("Error getting team members:", membersError)
-        }
-
-        // Calculate average points per member
-        const totalMemberPoints = members?.reduce((sum, member) => sum + member.total_points, 0) || 0
-        const avgPoints = members && members.length > 0 ? Math.round(totalMemberPoints / members.length) : 0
-
-        return {
-          ...team,
-          members: count || 0,
-          avg_points: avgPoints,
-        }
-      }),
-    )
-
-    // Add rank and badge to each team
-    return teamsWithDetails.map((team, index) => ({
-      ...team,
-      rank: index + 1,
-      badge: index < 3 ? ["🥇", "🥈", "🥉"][index] : null,
-    }))
-  } catch (error) {
+    return data || []
+  } catch (error: any) {
     console.error("Error in getTeamLeaderboard:", error)
     return []
   }
 }
 
 export async function searchUsers(query: string) {
-  const cookieStore = cookies()
-  const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
-    cookies: {
-      get: (name) => cookieStore.get(name)?.value,
-      set: (name, value, options) => cookieStore.set(name, value, options),
-      remove: (name, options) => cookieStore.set(name, "", { ...options, maxAge: 0 }),
-    },
-  })
-
-  // Use admin client for more reliable data access
-  const adminClient = createAdminClient()
-
   try {
-    const { data, error } = await adminClient
+    const serviceClient = await createServiceRoleClient()
+
+    const { data, error } = await serviceClient
       .from("users")
-      .select("id, full_name, email, avatar_url, total_points, current_tier")
-      .or(`full_name.ilike.%${query}%,email.ilike.%${query}%`)
+      .select("id, full_name, email, total_points, current_tier, avatar_url")
+      .ilike("full_name", `%${query}%`)
       .order("total_points", { ascending: false })
-      .limit(10)
+      .limit(5)
 
-    if (error) throw error
+    if (error) {
+      console.error("Error searching users:", error)
+      return []
+    }
 
-    // Ensure all users have names
-    return data.map((user) => ({
-      ...user,
-      full_name: user.full_name || generateNameFromEmail(user.email),
-    }))
-  } catch (error) {
-    console.error("Error searching users:", error)
-    throw error
+    return data || []
+  } catch (error: any) {
+    console.error("Error in searchUsers:", error)
+    return []
   }
 }
 
 export async function searchTeams(query: string) {
-  const cookieStore = cookies()
-  const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
-    cookies: {
-      get: (name) => cookieStore.get(name)?.value,
-      set: (name, value, options) => cookieStore.set(name, value, options),
-      remove: (name, options) => cookieStore.set(name, "", { ...options, maxAge: 0 }),
-    },
-  })
-
-  // Use admin client for more reliable data access
-  const adminClient = createAdminClient()
-
   try {
-    const { data, error } = await adminClient
+    const serviceClient = await createServiceRoleClient()
+
+    const { data, error } = await serviceClient
       .from("teams")
       .select("id, name, total_points, banner_url")
       .ilike("name", `%${query}%`)
       .order("total_points", { ascending: false })
-      .limit(10)
+      .limit(5)
 
-    if (error) throw error
+    if (error) {
+      console.error("Error searching teams:", error)
+      return []
+    }
 
-    // For each team, get the count of members and calculate average points
-    const teamsWithDetails = await Promise.all(
-      data.map(async (team) => {
-        // Get member count
-        const { count, error: countError } = await adminClient
-          .from("users")
-          .select("id", { count: "exact" })
-          .eq("team_id", team.id)
-
-        if (countError) throw countError
-
-        // Get all team members to calculate average points
-        const { data: members, error: membersError } = await adminClient
-          .from("users")
-          .select("total_points")
-          .eq("team_id", team.id)
-
-        if (membersError) throw membersError
-
-        // Calculate average points per member
-        const totalMemberPoints = members?.reduce((sum, member) => sum + member.total_points, 0) || 0
-        const avgPoints = members && members.length > 0 ? Math.round(totalMemberPoints / members.length) : 0
-
-        return {
-          ...team,
-          members: count || 0,
-          avg_points: avgPoints,
-        }
-      }),
-    )
-
-    return teamsWithDetails
-  } catch (error) {
-    console.error("Error searching teams:", error)
-    throw error
+    return data || []
+  } catch (error: any) {
+    console.error("Error in searchTeams:", error)
+    return []
   }
 }

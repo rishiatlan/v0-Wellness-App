@@ -6,169 +6,198 @@ import type { Database } from "@/types/supabase"
 import { revalidatePath } from "next/cache"
 import { createServerClient } from "@/lib/supabase/server"
 import { createServiceRoleClient } from "@/utils/supabase/service"
+import { createServiceRoleClient as createServiceRoleClientNew } from "@/lib/server-auth"
 
-// This function is the main one we need to fix
 export async function getTeams() {
   try {
-    // Use the service role client for more reliable access
-    const serviceClient = createServiceRoleClient()
-    console.log("Fetching teams with service role client")
+    const serviceClient = await createServiceRoleClientNew()
 
-    const { data, error } = await serviceClient.from("teams").select("*").order("total_points", { ascending: false })
+    const { data, error } = await serviceClient.from("teams").select("*").order("name")
 
     if (error) {
       console.error("Error fetching teams:", error)
-      throw error
+      return { success: false, error: error.message }
     }
 
-    console.log(`Successfully fetched ${data?.length || 0} teams`)
-    return data || []
+    return { success: true, data }
   } catch (error: any) {
     console.error("Error in getTeams:", error)
-    throw new Error(`Error fetching teams: ${error.message}`)
+    return { success: false, error: error.message }
   }
 }
 
 export async function getUserTeam(userId: string) {
-  try {
-    // Use service role client for more reliable access
-    const serviceClient = createServiceRoleClient()
-    console.log(`Fetching team for user ${userId} with service role client`)
+  if (!userId) {
+    return { success: false, error: "User ID is required" }
+  }
 
-    // Get the user's team_id
-    const { data: userData, error: userError } = await serviceClient
+  try {
+    const serviceClient = await createServiceRoleClientNew()
+
+    // Get user with team
+    const { data: user, error: userError } = await serviceClient
       .from("users")
       .select("team_id")
       .eq("id", userId)
       .single()
 
     if (userError) {
-      console.error("Error fetching user team_id:", userError)
-      return null
+      console.error("Error fetching user team ID:", userError)
+      return { success: false, error: userError.message }
     }
 
-    if (!userData?.team_id) {
-      console.log(`User ${userId} is not part of any team`)
-      return null
+    if (!user.team_id) {
+      return { success: true, data: null }
     }
 
-    // Get the team details
-    const { data: teamData, error: teamError } = await serviceClient
+    // Get team details
+    const { data: team, error: teamError } = await serviceClient
       .from("teams")
-      .select("id, name, total_points, banner_url")
-      .eq("id", userData.team_id)
+      .select("*")
+      .eq("id", user.team_id)
       .single()
 
     if (teamError) {
       console.error("Error fetching team details:", teamError)
-      return null
+      return { success: false, error: teamError.message }
     }
 
-    // Get team members
-    const { data: members, error: membersError } = await serviceClient
-      .from("users")
-      .select("id, full_name, email, total_points, avatar_url")
-      .eq("team_id", userData.team_id)
-
-    if (membersError) {
-      console.error("Error fetching team members:", membersError)
-      return { ...teamData, members: [], avgPoints: 0 }
-    }
-
-    // Calculate average points
-    const avgPoints =
-      members && members.length > 0
-        ? Math.round(members.reduce((sum, member) => sum + (member.total_points || 0), 0) / members.length)
-        : 0
-
-    console.log(`Successfully fetched team for user ${userId}: ${teamData.name} with ${members?.length || 0} members`)
-
-    return {
-      ...teamData,
-      members: members || [],
-      avgPoints,
-    }
-  } catch (error) {
-    console.error("Error in getUserTeam:", error)
-    return null
-  }
-}
-
-export async function createTeam(userId: string, teamName: string, bannerUrl?: string) {
-  const cookieStore = cookies()
-  const supabase = createServerClient(cookieStore)
-
-  try {
-    // Check if user already has a team
-    const { data: userData, error: userError } = await supabase
-      .from("users")
-      .select("team_id")
-      .eq("id", userId)
-      .maybeSingle()
-
-    if (userError) throw userError
-
-    if (userData?.team_id) {
-      return {
-        success: false,
-        error: "You are already a member of a team. You can only be part of one team at a time.",
-      }
-    }
-
-    // Get total number of teams to check if this is one of the first X teams
-    const { count: teamCount, error: countError } = await supabase.from("teams").select("id", { count: "exact" })
-
-    if (countError) throw countError
-
-    const BONUS_TEAM_LIMIT = 10 // First 10 teams get bonus
-    const shouldGetBonus = teamCount < BONUS_TEAM_LIMIT
-
-    // Create new team
-    const { data: team, error: teamError } = await supabase
-      .from("teams")
-      .insert({
-        name: teamName,
-        banner_url: bannerUrl || null,
-        total_points: shouldGetBonus ? 50 : 0,
-      })
-      .select()
-      .single()
-
-    if (teamError) throw teamError
-
-    // Update user's team_id
-    const { error: updateError } = await supabase.from("users").update({ team_id: team.id }).eq("id", userId)
-
-    if (updateError) throw updateError
-
-    // Create team formation achievement if eligible for bonus
-    if (shouldGetBonus) {
-      const { error: achievementError } = await supabase.from("team_achievements").insert({
-        team_id: team.id,
-        achievement_type: "EARLY_TEAM_FORMATION",
-        achievement_description: "Early Team Formation Bonus",
-        points_awarded: 50,
-      })
-
-      if (achievementError) throw achievementError
-    }
-
-    revalidatePath("/team-challenge")
-    return {
-      success: true,
-      team,
-      earlyBonus: shouldGetBonus,
-      message: shouldGetBonus
-        ? `Team "${teamName}" created successfully with a 50 point early formation bonus!`
-        : `Team "${teamName}" created successfully!`,
-    }
+    return { success: true, data: team }
   } catch (error: any) {
-    console.error("Error creating team:", error)
+    console.error("Error in getUserTeam:", error)
     return { success: false, error: error.message }
   }
 }
 
-// Update the joinTeam function to enforce a maximum of 5 members per team
+export async function getTeamMembers(teamId: string) {
+  if (!teamId) {
+    return { success: false, error: "Team ID is required" }
+  }
+
+  try {
+    const serviceClient = await createServiceRoleClientNew()
+
+    const { data, error } = await serviceClient
+      .from("users")
+      .select("id, full_name, email, total_points")
+      .eq("team_id", teamId)
+      .order("total_points", { ascending: false })
+
+    if (error) {
+      console.error("Error fetching team members:", error)
+      return { success: false, error: error.message }
+    }
+
+    return { success: true, data }
+  } catch (error: any) {
+    console.error("Error in getTeamMembers:", error)
+    return { success: false, error: error.message }
+  }
+}
+
+export async function assignUserToTeam(userId: string, teamId: string) {
+  if (!userId || !teamId) {
+    return { success: false, error: "User ID and Team ID are required" }
+  }
+
+  try {
+    const serviceClient = await createServiceRoleClientNew()
+
+    const { error } = await serviceClient.from("users").update({ team_id: teamId }).eq("id", userId)
+
+    if (error) {
+      console.error("Error assigning user to team:", error)
+      return { success: false, error: error.message }
+    }
+
+    revalidatePath("/admin")
+    revalidatePath("/team-challenge")
+    return { success: true }
+  } catch (error: any) {
+    console.error("Error in assignUserToTeam:", error)
+    return { success: false, error: error.message }
+  }
+}
+
+export async function createTeam(name: string, description: string) {
+  if (!name) {
+    return { success: false, error: "Team name is required" }
+  }
+
+  try {
+    const serviceClient = await createServiceRoleClientNew()
+
+    const { data, error } = await serviceClient.from("teams").insert({ name, description }).select().single()
+
+    if (error) {
+      console.error("Error creating team:", error)
+      return { success: false, error: error.message }
+    }
+
+    revalidatePath("/admin")
+    return { success: true, data }
+  } catch (error: any) {
+    console.error("Error in createTeam:", error)
+    return { success: false, error: error.message }
+  }
+}
+
+export async function updateTeam(id: string, name: string, description: string) {
+  if (!id || !name) {
+    return { success: false, error: "Team ID and name are required" }
+  }
+
+  try {
+    const serviceClient = await createServiceRoleClientNew()
+
+    const { error } = await serviceClient.from("teams").update({ name, description }).eq("id", id)
+
+    if (error) {
+      console.error("Error updating team:", error)
+      return { success: false, error: error.message }
+    }
+
+    revalidatePath("/admin")
+    revalidatePath("/team-challenge")
+    return { success: true }
+  } catch (error: any) {
+    console.error("Error in updateTeam:", error)
+    return { success: false, error: error.message }
+  }
+}
+
+export async function deleteTeam(id: string) {
+  if (!id) {
+    return { success: false, error: "Team ID is required" }
+  }
+
+  try {
+    const serviceClient = await createServiceRoleClientNew()
+
+    // First, remove team_id from all users in this team
+    const { error: userUpdateError } = await serviceClient.from("users").update({ team_id: null }).eq("team_id", id)
+
+    if (userUpdateError) {
+      console.error("Error removing users from team:", userUpdateError)
+      return { success: false, error: userUpdateError.message }
+    }
+
+    // Then delete the team
+    const { error } = await serviceClient.from("teams").delete().eq("id", id)
+
+    if (error) {
+      console.error("Error deleting team:", error)
+      return { success: false, error: error.message }
+    }
+
+    revalidatePath("/admin")
+    return { success: true }
+  } catch (error: any) {
+    console.error("Error in deleteTeam:", error)
+    return { success: false, error: error.message }
+  }
+}
+
 export async function joinTeam(userId: string, teamId: string) {
   const supabase = createServerActionClient<Database>({ cookies })
 

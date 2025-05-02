@@ -389,71 +389,55 @@ export async function createTeam(teamName: string) {
 // Get all admin users
 export async function getAdminUsers() {
   try {
-    const user = await getCurrentUser()
-    if (!user || !(await verifyAdmin())) {
-      throw new Error("Unauthorized: Admin access required")
+    const serviceClient = await createServiceRoleClient()
+
+    const { data, error } = await serviceClient.from("admin_users").select("*")
+
+    if (error) {
+      console.error("Error fetching admin users:", error)
+      return { success: false, error: error.message }
     }
 
-    const serviceClient = createServiceRoleClient()
-
-    const { data, error } = await serviceClient.from("admin_users").select("email").order("email")
-
-    if (error) throw error
-
-    return data?.map((admin) => admin.email) || []
+    return { success: true, data }
   } catch (error: any) {
-    console.error("Error getting admin users:", error)
-    throw new Error(`Failed to get admin users: ${error.message}`)
+    console.error("Error in getAdminUsers:", error)
+    return { success: false, error: error.message }
   }
 }
 
 // Add a new admin user
 export async function addAdminUser(email: string) {
   try {
-    const user = await getCurrentUser()
-    if (!user || !(await verifyAdmin())) {
-      return { success: false, error: "Unauthorized: Admin access required" }
-    }
+    const serviceClient = await createServiceRoleClient()
 
-    // Check if email is valid
-    if (!email || !email.includes("@")) {
-      return { success: false, error: "Invalid email address" }
-    }
-
-    const serviceClient = createServiceRoleClient()
-
-    // Check if user exists
-    const { data: userData, error: userError } = await serviceClient
-      .from("users")
-      .select("id")
+    // Check if user already exists
+    const { data: existingUser, error: checkError } = await serviceClient
+      .from("admin_users")
+      .select("*")
       .eq("email", email)
       .maybeSingle()
 
-    // Get user ID if exists, otherwise null
-    const userId = userData?.id || null
+    if (checkError) {
+      console.error("Error checking if admin user exists:", checkError)
+      return { success: false, error: checkError.message }
+    }
 
-    // Add to admin_users table
-    const { error } = await serviceClient.from("admin_users").insert({
-      email: email.toLowerCase(),
-      user_id: userId,
-    })
+    if (existingUser) {
+      return { success: false, error: "User is already an admin" }
+    }
+
+    // Add user to admin_users table
+    const { error } = await serviceClient.from("admin_users").insert({ email })
 
     if (error) {
-      if (error.code === "23505") {
-        // Unique violation
-        return { success: false, error: "User is already an admin" }
-      }
-      throw error
+      console.error("Error adding admin user:", error)
+      return { success: false, error: error.message }
     }
 
     revalidatePath("/admin")
-
-    return {
-      success: true,
-      email,
-    }
+    return { success: true }
   } catch (error: any) {
-    console.error("Error adding admin:", error)
+    console.error("Error in addAdminUser:", error)
     return { success: false, error: error.message }
   }
 }
@@ -461,31 +445,19 @@ export async function addAdminUser(email: string) {
 // Remove admin privileges
 export async function removeAdminUser(email: string) {
   try {
-    const user = await getCurrentUser()
-    if (!user || !(await verifyAdmin())) {
-      return { success: false, error: "Unauthorized: Admin access required" }
+    const serviceClient = await createServiceRoleClient()
+
+    const { error } = await serviceClient.from("admin_users").delete().eq("email", email)
+
+    if (error) {
+      console.error("Error removing admin user:", error)
+      return { success: false, error: error.message }
     }
-
-    // Don't allow removing yourself
-    if (email.toLowerCase() === user?.email?.toLowerCase()) {
-      return { success: false, error: "You cannot remove your own admin privileges" }
-    }
-
-    const serviceClient = createServiceRoleClient()
-
-    // Remove from admin_users table
-    const { error } = await serviceClient.from("admin_users").delete().eq("email", email.toLowerCase())
-
-    if (error) throw error
 
     revalidatePath("/admin")
-
-    return {
-      success: true,
-      email,
-    }
+    return { success: true }
   } catch (error: any) {
-    console.error("Error removing admin:", error)
+    console.error("Error in removeAdminUser:", error)
     return { success: false, error: error.message }
   }
 }
@@ -637,5 +609,25 @@ export async function addUser(email: string, fullName: string) {
   } catch (error: any) {
     console.error("Error adding user:", error)
     return { success: false, error: error.message }
+  }
+}
+
+export async function isUserAdmin(email: string): Promise<boolean> {
+  if (!email) return false
+
+  try {
+    const serviceClient = await createServiceRoleClient()
+
+    const { data, error } = await serviceClient.from("admin_users").select("*").eq("email", email).maybeSingle()
+
+    if (error) {
+      console.error("Error checking if user is admin:", error)
+      return false
+    }
+
+    return !!data
+  } catch (error) {
+    console.error("Error in isUserAdmin:", error)
+    return false
   }
 }

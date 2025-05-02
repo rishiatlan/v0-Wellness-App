@@ -69,8 +69,8 @@
     "canvas-confetti": "latest",
     "framer-motion": "latest",
     "@tailwindcss/typography": "latest",
-    "@tanstack/react-query-devtools": "latest",
-    "child_process": "latest"
+    "child_process": "latest",
+    "@tanstack/react-query-devtools": "latest"
   },
   "devDependencies": {
     "@types/node": "^22",

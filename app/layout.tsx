@@ -15,6 +15,7 @@ import { ErrorBoundary } from "@/components/error-boundary"
 import { PerformanceMonitor } from "@/components/performance-monitor"
 import ProtectedLayout from "./protected-layout"
 import { headers } from "next/headers"
+import { ReactQueryProvider } from "@/lib/react-query-provider"
 
 // Use Inter with expanded subset for better language support
 const inter = Inter({
@@ -72,29 +73,31 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <PerformanceMonitor />
         <ErrorBoundary>
           <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
-            <AssetPreloader />
-            <AuthProvider>
-              <AppInitializer />
-              <div className="min-h-screen flex flex-col">
-                {/* Header is now always visible on all pages */}
-                <Header />
+            <ReactQueryProvider>
+              <AssetPreloader />
+              <AuthProvider>
+                <AppInitializer />
+                <div className="min-h-screen flex flex-col">
+                  {/* Header is now always visible on all pages */}
+                  <Header />
 
-                {/* Show pre-launch banner if challenge hasn't started */}
-                <PreLaunchBanner launchDate={startDate} isChallengeLive={started} />
+                  {/* Show pre-launch banner if challenge hasn't started */}
+                  <PreLaunchBanner launchDate={startDate} isChallengeLive={started} />
 
-                {/* Main content with flex-grow to push footer down */}
-                <main className="flex-grow">
-                  <ErrorBoundary>
-                    {/* Wrap children in ProtectedLayout for auth checks */}
-                    <ProtectedLayout currentPath={currentPath}>{children}</ProtectedLayout>
-                  </ErrorBoundary>
-                </main>
+                  {/* Main content with flex-grow to push footer down */}
+                  <main className="flex-grow">
+                    <ErrorBoundary>
+                      {/* Wrap children in ProtectedLayout for auth checks */}
+                      <ProtectedLayout currentPath={currentPath}>{children}</ProtectedLayout>
+                    </ErrorBoundary>
+                  </main>
 
-                {/* Footer always visible at the bottom */}
-                <Footer />
-              </div>
-              <Toaster />
-            </AuthProvider>
+                  {/* Footer always visible at the bottom */}
+                  <Footer />
+                </div>
+                <Toaster />
+              </AuthProvider>
+            </ReactQueryProvider>
           </ThemeProvider>
         </ErrorBoundary>
       </body>

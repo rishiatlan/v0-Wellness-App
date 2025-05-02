@@ -41,7 +41,7 @@ export async function getActivities() {
 // Fix the getDailyLogs function to ensure all logs are retrieved
 export async function getDailyLogs(userId: string, date: string) {
   // Use the service role client directly for more reliable data access
-  const serviceClient = createServiceRoleClient()
+  const serviceClient = await createServiceRoleClient()
 
   try {
     const { data, error } = await serviceClient
@@ -66,7 +66,7 @@ export async function getDailyLogs(userId: string, date: string) {
 // Optimize checkActivityAlreadyLogged to use count only
 export async function checkActivityAlreadyLogged(userId: string, activityId: string, date: string): Promise<boolean> {
   // Always use the service role client for this check to avoid RLS issues
-  const serviceClient = createServiceRoleClient()
+  const serviceClient = await createServiceRoleClient()
 
   try {
     // Use count only to minimize data transfer
@@ -91,7 +91,7 @@ export async function checkActivityAlreadyLogged(userId: string, activityId: str
 
 // Function to ensure user exists in the database
 async function ensureUserExists(userId: string, userEmail: string, userName: string) {
-  const serviceClient = createServiceRoleClient()
+  const serviceClient = await createServiceRoleClient()
 
   try {
     // Check if user exists
@@ -141,26 +141,40 @@ async function ensureUserExists(userId: string, userEmail: string, userName: str
 }
 
 // Optimize logActivity to use minimal returns and better error handling
-export async function logActivity(activityId: number, notes?: string) {
-  try {
-    const supabase = createServerClient()
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
+export async function logActivity(
+  userId: string,
+  activityId: string,
+  date: string,
+  points: number,
+  userEmail = "",
+  userName = "",
+) {
+  // Use the service role client for more reliable data access
+  const serviceClient = await createServiceRoleClient()
 
-    if (!user) {
-      return { success: false, error: "User not authenticated" }
+  try {
+    console.log(`Logging activity for user ${userId}, activity ${activityId}, date ${date}, points ${points}`)
+
+    // Ensure user exists in the database
+    await ensureUserExists(userId, userEmail, userName)
+
+    // Check if activity has already been logged today
+    const alreadyLogged = await checkActivityAlreadyLogged(userId, activityId, date)
+    if (alreadyLogged) {
+      console.log("Activity already logged for today")
+      return { success: false, error: "Activity already logged for today" }
     }
 
-    // Insert activity with optimized query
-    const { data, error } = await supabase
-      .from("activity_logs")
+    // Insert the daily log
+    const { data, error } = await serviceClient
+      .from("daily_logs")
       .insert({
+        user_id: userId,
         activity_id: activityId,
-        user_id: user.id,
-        notes,
+        log_date: date,
+        points: points,
       })
-      .select("id, points")
+      .select("id")
       .single()
 
     if (error) {
@@ -168,26 +182,18 @@ export async function logActivity(activityId: number, notes?: string) {
       return { success: false, error: error.message }
     }
 
-    return {
-      success: true,
-      data: {
-        id: data.id,
-        points: data.points,
-        activityId,
-        userId: user.id,
-        createdAt: new Date().toISOString(),
-        notes,
-      },
-    }
+    // Revalidate the daily tracker page
+    revalidatePath("/daily-tracker")
+    return { success: true, data }
   } catch (error: any) {
-    console.error("Exception in logActivity:", error)
+    console.error("Error in logActivity:", error)
     return { success: false, error: error.message }
   }
 }
 
 // Add a helper function to recalculate user points
 async function recalculateUserPoints(userId: string) {
-  const serviceClient = createServiceRoleClient()
+  const serviceClient = await createServiceRoleClient()
 
   try {
     // Get all daily logs for the user
@@ -225,7 +231,7 @@ async function recalculateUserPoints(userId: string) {
 }
 
 export async function getUserProfile(userId: string) {
-  const serviceClient = createServiceRoleClient()
+  const serviceClient = await createServiceRoleClient()
 
   try {
     const { data, error } = await serviceClient
@@ -285,7 +291,7 @@ export async function getUserProfile(userId: string) {
 }
 
 export async function createDefaultActivities(userId: string, activities: any[]) {
-  const serviceClient = createServiceRoleClient()
+  const serviceClient = await createServiceRoleClient()
 
   try {
     // First ensure the user exists
@@ -321,7 +327,7 @@ export async function createDefaultActivities(userId: string, activities: any[])
 
 // Direct server action to unlog an activity (for client-side use)
 export async function unlogActivity(userId: string, activityId: string, date: string) {
-  const serviceClient = createServiceRoleClient()
+  const serviceClient = await createServiceRoleClient()
 
   try {
     console.log(`Unlogging activity for user ${userId}, activity ${activityId}, date ${date}`)
