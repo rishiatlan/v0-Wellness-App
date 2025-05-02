@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { createContext, useContext, useEffect, useState, useCallback } from "react"
+import { createContext, useContext, useEffect, useState, useCallback, useRef } from "react"
 import type { Session, User } from "@supabase/supabase-js"
 import { supabase } from "./supabase-client"
 
@@ -24,6 +24,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
+  const previousSession = useRef<Session | null>(null)
 
   // Function to refresh the session
   const refreshSession = useCallback(async () => {
@@ -66,10 +67,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // Subscribe to auth changes
     const { data: authListener } = supabase.auth.onAuthStateChange((event, newSession) => {
-      console.log("Auth state changed:", event)
+      console.log("Auth state changed:", {
+        event: "AUTH_STATE_CHANGED",
+        session: !!session,
+        user: !!user,
+      })
       setSession(newSession)
       setUser(newSession?.user ?? null)
       setLoading(false)
+
+      // Force a page refresh if the session changes to ensure all components have the latest auth state
+      if (newSession && !previousSession.current) {
+        previousSession.current = newSession
+        console.log("New session detected, updating application state")
+      }
     })
 
     // Clean up the subscription

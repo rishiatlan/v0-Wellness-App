@@ -55,6 +55,13 @@ export async function signIn(email: string, password: string) {
       password,
     })
 
+    // Add this after the authentication attempt in the signIn function
+    console.log("Authentication response:", {
+      session: !!data.session,
+      user: !!data.user,
+      expiresAt: data.session?.expires_at,
+    })
+
     if (error) {
       logAuthEvent("Supabase auth error", { error: error.message })
 
@@ -81,6 +88,9 @@ export async function signIn(email: string, password: string) {
       email,
       expiresAt: new Date(data.session.expires_at! * 1000).toLocaleString(),
     })
+
+    // Also log the redirect attempt
+    logAuthEvent("Attempting redirect after login", { callbackUrl: window.location.origin + "/daily-tracker" })
 
     return data
   } catch (error: any) {

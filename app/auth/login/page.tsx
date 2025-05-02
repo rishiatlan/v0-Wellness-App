@@ -70,14 +70,15 @@ export default function LoginPage() {
       console.log("Attempting login for:", email)
       const { session, user } = await signIn(email, password)
 
+      // Replace the current router.push with this implementation
       if (session && user) {
         console.log("Login successful, redirecting to:", callbackUrl)
 
         // Store last login date for streak calculation
         localStorage.setItem("lastLogin", new Date().toISOString().split("T")[0])
 
-        // Redirect to the callback URL or default page
-        router.push(callbackUrl)
+        // Use window.location for a hard redirect instead of router.push
+        window.location.href = callbackUrl
       } else {
         console.error("Login succeeded but no session or user returned")
         setError("Authentication succeeded but session creation failed. Please try again.")

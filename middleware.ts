@@ -20,10 +20,10 @@ export function middleware(request: NextRequest) {
   headers.set("Referrer-Policy", "strict-origin-when-cross-origin")
   headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), interest-cohort=()")
 
-  // Add CSP header
+  // Add CSP header with Google Fonts allowed
   headers.set(
     "Content-Security-Policy",
-    "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://v0-spring-wellness-app.vercel.app; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co; font-src 'self' data:; connect-src 'self' https://*.supabase.co https://v0-spring-wellness-app.vercel.app; frame-src 'self'; object-src 'none';",
+    "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://v0-spring-wellness-app.vercel.app; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https://*.supabase.co; connect-src 'self' https://*.supabase.co https://v0-spring-wellness-app.vercel.app; frame-src 'self'; object-src 'none';",
   )
 
   // Add the pathname to headers for server components
@@ -46,6 +46,14 @@ export function middleware(request: NextRequest) {
       url.searchParams.set("callbackUrl", pathname)
       return NextResponse.redirect(url)
     }
+  }
+
+  // Add fallback for auth redirects
+  // If we have an auth cookie but the URL has a login redirect parameter, clear it
+  if (request.cookies.get("sb-auth-token") && request.nextUrl.searchParams.has("callbackUrl")) {
+    const callbackUrl = request.nextUrl.searchParams.get("callbackUrl") || "/"
+    console.log("Middleware detected authenticated user with callback URL, redirecting to:", callbackUrl)
+    return NextResponse.redirect(new URL(callbackUrl, request.url))
   }
 
   return response
