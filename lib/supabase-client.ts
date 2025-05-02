@@ -9,9 +9,15 @@ if (!supabaseUrl || !supabaseAnonKey) {
   console.error("Missing Supabase environment variables!")
 }
 
+// Create a singleton instance
+let supabaseInstance: ReturnType<typeof createClient> | null = null
+
 // Create a singleton Supabase client for the entire app
-const createSingletonClient = () => {
-  return createClient<Database>(supabaseUrl || "", supabaseAnonKey || "", {
+export const supabase = (() => {
+  if (supabaseInstance) return supabaseInstance
+
+  // Only create a new instance if one doesn't exist
+  supabaseInstance = createClient<Database>(supabaseUrl || "", supabaseAnonKey || "", {
     auth: {
       persistSession: true,
       autoRefreshToken: true,
@@ -29,21 +35,9 @@ const createSingletonClient = () => {
       },
     },
   })
-}
 
-// Export as a singleton to prevent multiple instances
-export const supabase = createSingletonClient()
-
-// Initialize and test connection
-supabase.auth.getSession().then(({ data, error }) => {
-  if (error) {
-    console.error("Error getting initial session:", error)
-  } else if (data.session) {
-    console.log("Initial session exists, expires at:", new Date(data.session.expires_at! * 1000).toLocaleString())
-  } else {
-    console.log("No initial session found")
-  }
-})
+  return supabaseInstance
+})()
 
 // Export a function to get a fresh client if needed
 export function getSupabaseClient() {

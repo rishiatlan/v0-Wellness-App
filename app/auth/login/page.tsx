@@ -5,7 +5,6 @@ import type React from "react"
 import { useState, useEffect } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
-import { signIn } from "@/lib/auth"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -13,6 +12,8 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AlertCircle, Loader2, Info } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
+import { supabase } from "@/lib/supabase-client"
+import { DebugAuthButton } from "@/components/debug-auth-button"
 
 export default function LoginPage() {
   const [email, setEmail] = useState("")
@@ -43,9 +44,9 @@ export default function LoginPage() {
   useEffect(() => {
     if (user && session) {
       console.log("User already logged in, redirecting to:", callbackUrl)
-      router.push(callbackUrl)
+      window.location.href = callbackUrl
     }
-  }, [user, session, router, callbackUrl])
+  }, [user, session, callbackUrl])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -68,34 +69,35 @@ export default function LoginPage() {
       }
 
       console.log("Attempting login for:", email)
-      const { session, user } = await signIn(email, password)
 
-      // Replace the current router.push with this implementation
-      if (session && user) {
+      // Use Supabase directly to avoid any middleware issues
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
+
+      if (error) {
+        console.error("Login error:", error)
+        setError(error.message || "Failed to sign in. Please try again.")
+        setLoading(false)
+        return
+      }
+
+      if (data.session) {
         console.log("Login successful, redirecting to:", callbackUrl)
 
         // Store last login date for streak calculation
         localStorage.setItem("lastLogin", new Date().toISOString().split("T")[0])
 
-        // Use window.location for a hard redirect instead of router.push
+        // Use direct navigation to ensure the page reloads with the new auth state
         window.location.href = callbackUrl
       } else {
-        console.error("Login succeeded but no session or user returned")
+        console.error("Login succeeded but no session returned")
         setError("Authentication succeeded but session creation failed. Please try again.")
       }
     } catch (err: any) {
-      console.error("Login error:", err)
-
-      // Provide more user-friendly error messages
-      if (err.message?.includes("Invalid login")) {
-        setError("Invalid email or password. Please check your credentials and try again.")
-      } else if (err.message?.includes("Email not confirmed")) {
-        setError("Please verify your email address before logging in.")
-      } else if (err.message?.includes("rate limit")) {
-        setError("Too many login attempts. Please try again later.")
-      } else {
-        setError(err.message || "Failed to sign in. Please try again.")
-      }
+      console.error("Login exception:", err)
+      setError(err.message || "An unexpected error occurred. Please try again.")
     } finally {
       setLoading(false)
     }
@@ -165,6 +167,9 @@ export default function LoginPage() {
               )}
             </Button>
           </form>
+
+          {/* Add debug button in development */}
+          {process.env.NODE_ENV !== "production" && <DebugAuthButton />}
         </CardContent>
         <CardFooter className="flex flex-col space-y-4">
           <div className="text-center text-sm">

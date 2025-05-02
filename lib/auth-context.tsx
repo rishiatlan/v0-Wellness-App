@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { createContext, useContext, useEffect, useState, useCallback, useRef } from "react"
+import { createContext, useContext, useEffect, useState, useCallback } from "react"
 import type { Session, User } from "@supabase/supabase-js"
 import { supabase } from "./supabase-client"
 
@@ -20,11 +20,12 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 // Create a provider component
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  // Use null as initial state to prevent hydration mismatch
   const [user, setUser] = useState<User | null>(null)
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
-  const previousSession = useRef<Session | null>(null)
+  const [isInitialized, setIsInitialized] = useState(false)
 
   // Function to refresh the session
   const refreshSession = useCallback(async () => {
@@ -51,6 +52,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await supabase.auth.signOut()
       setUser(null)
       setSession(null)
+
+      // Force a page reload to clear all state
+      window.location.href = "/"
     } catch (err: any) {
       console.error("Error signing out:", err)
       setError(err)
@@ -59,35 +63,61 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Initialize auth state
   useEffect(() => {
+    if (typeof window === "undefined") return
+
+    let mounted = true
+
     // Set loading to true when the component mounts
-    setLoading(true)
+    if (mounted) setLoading(true)
 
     // Get the initial session
-    refreshSession()
+    const initializeAuth = async () => {
+      try {
+        const { data, error } = await supabase.auth.getSession()
 
-    // Subscribe to auth changes
+        if (error) {
+          console.error("Error getting initial session:", error)
+          if (mounted) setError(error)
+          return
+        }
+
+        if (mounted) {
+          setSession(data.session)
+          setUser(data.session?.user ?? null)
+          setIsInitialized(true)
+        }
+      } catch (err) {
+        console.error("Exception during auth initialization:", err)
+      } finally {
+        if (mounted) setLoading(false)
+      }
+    }
+
+    initializeAuth()
+
+    // Subscribe to auth changes only after initial load
     const { data: authListener } = supabase.auth.onAuthStateChange((event, newSession) => {
-      console.log("Auth state changed:", {
-        event: "AUTH_STATE_CHANGED",
-        session: !!session,
-        user: !!user,
-      })
-      setSession(newSession)
-      setUser(newSession?.user ?? null)
-      setLoading(false)
+      console.log("Auth state changed:", event)
 
-      // Force a page refresh if the session changes to ensure all components have the latest auth state
-      if (newSession && !previousSession.current) {
-        previousSession.current = newSession
-        console.log("New session detected, updating application state")
+      if (mounted) {
+        setSession(newSession)
+        setUser(newSession?.user ?? null)
+        setLoading(false)
+
+        // If we get a signed_in event, reload the page to ensure all components have the latest auth state
+        if (event === "SIGNED_IN") {
+          console.log("User signed in, reloading page to update auth state")
+          window.location.reload()
+        }
       }
     })
 
     // Clean up the subscription
     return () => {
+      mounted = false
       authListener.subscription.unsubscribe()
     }
-  }, [refreshSession])
+  }, [])
 
   // Memoize the context value to prevent unnecessary re-renders
   const value = {
@@ -99,6 +129,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     refreshSession,
   }
 
+  // Only render children once we've initialized auth to prevent hydration mismatch
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 

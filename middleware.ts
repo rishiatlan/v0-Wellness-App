@@ -29,31 +29,28 @@ export function middleware(request: NextRequest) {
   // Add the pathname to headers for server components
   headers.set("x-pathname", pathname)
 
-  // Handle redirects for authentication
-  if (
-    pathname !== "/" &&
-    !pathname.startsWith("/auth/") &&
-    !pathname.startsWith("/api/") &&
-    !pathname.startsWith("/_next/") &&
-    !pathname.includes(".") // Skip files like favicon.ico
-  ) {
+  // Skip auth check for certain paths
+  const isPublicPath =
+    pathname === "/" ||
+    pathname.startsWith("/auth/") ||
+    pathname.startsWith("/api/") ||
+    pathname.startsWith("/_next/") ||
+    pathname.includes(".") // Skip files like favicon.ico
+
+  // Skip auth check if we're already on the login page to prevent redirect loops
+  const isLoginPage = pathname === "/auth/login"
+
+  if (!isPublicPath && !isLoginPage) {
     // Check for authentication cookie
     const authCookie = request.cookies.get("sb-auth-token")
 
     if (!authCookie) {
+      console.log("No auth cookie found, redirecting to login from:", pathname)
       // Redirect to login with the original URL as the callback
       const url = new URL("/auth/login", request.url)
       url.searchParams.set("callbackUrl", pathname)
       return NextResponse.redirect(url)
     }
-  }
-
-  // Add fallback for auth redirects
-  // If we have an auth cookie but the URL has a login redirect parameter, clear it
-  if (request.cookies.get("sb-auth-token") && request.nextUrl.searchParams.has("callbackUrl")) {
-    const callbackUrl = request.nextUrl.searchParams.get("callbackUrl") || "/"
-    console.log("Middleware detected authenticated user with callback URL, redirecting to:", callbackUrl)
-    return NextResponse.redirect(new URL(callbackUrl, request.url))
   }
 
   return response
