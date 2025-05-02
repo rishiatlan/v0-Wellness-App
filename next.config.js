@@ -18,22 +18,11 @@ const nextConfig = {
     ],
     unoptimized: true,
   },
-  // Add experimental features for performance
+  // Fix experimental features for Next.js 15.x compatibility
   experimental: {
-    // Enable React Server Components
-    serverComponents: true,
-    // Enable concurrent features
-    concurrentFeatures: true,
-    // Enable optimized font loading
-    fontLoaders: [{ loader: "@next/font/google", options: { subsets: ["latin"] } }],
-    // Enable optimized bundle splitting
+    // Enable optimized CSS
     optimizeCss: true,
-    // Enable memory cache for server components
-    serverComponentsExternalPackages: [],
-    // Enable optimized image loading
-    images: {
-      allowFutureImage: true,
-    },
+    // Remove deprecated options
   },
   // Optimize compiler options
   compiler: {
