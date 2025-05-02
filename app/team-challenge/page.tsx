@@ -1,16 +1,15 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Loader2, Trophy, Award, Users, AlertCircle, RefreshCcw } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { getUserTeam } from "@/app/actions/team-actions"
-import { getAvatarUrl, getInitials } from "@/lib/avatar-utils"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { OptimizedAvatar } from "@/components/optimized-avatar"
 
 export default function TeamChallenge() {
   const { user, loading: authLoading } = useAuth()
@@ -20,8 +19,9 @@ export default function TeamChallenge() {
   const [activeTab, setActiveTab] = useState("all-teams")
   const [error, setError] = useState<string | null>(null)
   const [debugInfo, setDebugInfo] = useState<string | null>(null)
+  const [retryCount, setRetryCount] = useState(0)
 
-  const fetchTeamData = async () => {
+  const fetchTeamData = useCallback(async () => {
     try {
       setLoading(true)
       setError(null)
@@ -30,7 +30,7 @@ export default function TeamChallenge() {
       // Try to fetch teams from the API endpoint
       try {
         setDebugInfo("Fetching teams from API endpoint...")
-        const response = await fetch("/api/teams")
+        const response = await fetch(`/api/teams?cache=${Date.now()}`) // Add cache-busting parameter
 
         if (!response.ok) {
           const errorText = await response.text()
@@ -46,14 +46,41 @@ export default function TeamChallenge() {
           setAllTeams(data.teams)
         } else {
           setDebugInfo("No teams data received from API")
-          setAllTeams([])
-          setError("No teams found in the database. Please contact your administrator.")
+
+          // Try fallback to server action
+          setDebugInfo("Trying fallback to server action...")
+          const { getAllTeamsWithMembers } = await import("@/app/actions/team-actions")
+          const teamsData = await getAllTeamsWithMembers()
+
+          if (teamsData && teamsData.length > 0) {
+            setAllTeams(teamsData)
+            setDebugInfo(`Fallback successful: ${teamsData.length} teams loaded`)
+          } else {
+            setAllTeams([])
+            setError("No teams found in the database. Please contact your administrator.")
+          }
         }
       } catch (teamsError: any) {
         console.error("Error fetching teams:", teamsError)
         setDebugInfo(`Error fetching teams: ${teamsError.message}`)
-        setError(`Failed to load teams: ${teamsError.message}`)
-        setAllTeams([])
+
+        // Try fallback to server action
+        try {
+          setDebugInfo("Trying fallback to server action...")
+          const { getAllTeamsWithMembers } = await import("@/app/actions/team-actions")
+          const teamsData = await getAllTeamsWithMembers()
+
+          if (teamsData && teamsData.length > 0) {
+            setAllTeams(teamsData)
+            setDebugInfo(`Fallback successful: ${teamsData.length} teams loaded`)
+          } else {
+            setAllTeams([])
+            setError(`Failed to load teams: ${teamsError.message}`)
+          }
+        } catch (fallbackError: any) {
+          setAllTeams([])
+          setError(`Failed to load teams: ${teamsError.message}. Fallback also failed: ${fallbackError.message}`)
+        }
       }
 
       // If user is logged in, fetch their team
@@ -82,14 +109,35 @@ export default function TeamChallenge() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [user, retryCount]) // Add retryCount to dependencies
 
   useEffect(() => {
     // Only fetch data if auth is not loading
     if (!authLoading) {
       fetchTeamData()
     }
-  }, [user, authLoading])
+  }, [fetchTeamData, authLoading])
+
+  // Add a timeout to prevent infinite loading
+  useEffect(() => {
+    if (loading) {
+      const timeout = setTimeout(() => {
+        if (loading) {
+          setLoading(false)
+          setError("Loading timed out. Please try refreshing the page.")
+        }
+      }, 15000) // 15 seconds timeout
+
+      return () => clearTimeout(timeout)
+    }
+  }, [loading])
+
+  const handleRetry = () => {
+    setRetryCount((prev) => prev + 1)
+    setError(null)
+    setLoading(true)
+    fetchTeamData()
+  }
 
   // Show loading state while auth is loading
   if (authLoading) {
@@ -118,7 +166,7 @@ export default function TeamChallenge() {
         <Button
           variant="outline"
           size="sm"
-          onClick={fetchTeamData}
+          onClick={handleRetry}
           disabled={loading}
           className="flex items-center gap-2"
         >
@@ -209,15 +257,14 @@ export default function TeamChallenge() {
                           >
                             {index + 1}
                           </div>
-                          <Avatar className="h-10 w-10 border-2 border-navy-700">
-                            <AvatarImage
-                              src={team.banner_url || getAvatarUrl(team.id || `team-${index}`, "team")}
-                              alt={team.name || `Team ${index + 1}`}
-                            />
-                            <AvatarFallback className="bg-navy-700 text-white">
-                              {getInitials(team.name || `T${index + 1}`)}
-                            </AvatarFallback>
-                          </Avatar>
+                          <OptimizedAvatar
+                            userId={team.id}
+                            name={team.name || `Team ${index + 1}`}
+                            type="team"
+                            fallbackUrl={team.banner_url}
+                            className="border-2 border-navy-700"
+                            size="md"
+                          />
                           <div>
                             <div className="font-medium text-white">{team.name || "Team " + (index + 1)}</div>
                             <div className="text-xs text-slate-400">{team.memberCount || 0} members</div>
@@ -246,13 +293,14 @@ export default function TeamChallenge() {
                 <Card className="bg-navy-950 border-navy-800">
                   <CardHeader className="border-b border-navy-800">
                     <div className="flex items-center gap-4">
-                      <Avatar className="h-12 w-12 border-2 border-navy-700">
-                        <AvatarImage
-                          src={userTeam.banner_url || getAvatarUrl(userTeam.id, "team")}
-                          alt={userTeam.name}
-                        />
-                        <AvatarFallback className="bg-navy-700 text-white">{getInitials(userTeam.name)}</AvatarFallback>
-                      </Avatar>
+                      <OptimizedAvatar
+                        userId={userTeam.id}
+                        name={userTeam.name}
+                        type="team"
+                        fallbackUrl={userTeam.banner_url}
+                        className="border-2 border-navy-700"
+                        size="lg"
+                      />
                       <div>
                         <CardTitle className="text-white">{userTeam.name}</CardTitle>
                         <CardDescription className="text-slate-400">Your wellness team</CardDescription>
@@ -279,15 +327,13 @@ export default function TeamChallenge() {
                             className="flex items-center justify-between rounded-lg border border-navy-800 p-3"
                           >
                             <div className="flex items-center gap-3">
-                              <Avatar>
-                                <AvatarImage
-                                  src={member.avatar_url || getAvatarUrl(member.id || member.email, "user")}
-                                  alt={member.full_name || "User"}
-                                />
-                                <AvatarFallback className="bg-navy-700 text-white">
-                                  {getInitials(member.full_name || member.email)}
-                                </AvatarFallback>
-                              </Avatar>
+                              <OptimizedAvatar
+                                userId={member.id}
+                                email={member.email}
+                                name={member.full_name}
+                                fallbackUrl={member.avatar_url}
+                                size="sm"
+                              />
                               <div>
                                 <div className="font-medium text-white">{member.full_name || "Unknown User"}</div>
                                 <div className="text-xs text-slate-400">{member.email}</div>
@@ -369,13 +415,14 @@ function TeamCard({ team }) {
     <Card className="bg-navy-950 border-navy-800">
       <CardHeader className="pb-2 border-b border-navy-800">
         <div className="flex items-center gap-3 mb-2">
-          <Avatar className="h-10 w-10 border-2 border-navy-700">
-            <AvatarImage
-              src={team.banner_url || getAvatarUrl(team.id || team.name, "team")}
-              alt={team.name || "Team"}
-            />
-            <AvatarFallback className="bg-navy-700 text-white">{getInitials(team.name || "Team")}</AvatarFallback>
-          </Avatar>
+          <OptimizedAvatar
+            userId={team.id}
+            name={team.name || "Team"}
+            type="team"
+            fallbackUrl={team.banner_url}
+            className="border-2 border-navy-700"
+            size="md"
+          />
           <CardTitle className="flex items-center justify-between text-white">
             <span>{team.name || "Unnamed Team"}</span>
           </CardTitle>
@@ -390,15 +437,13 @@ function TeamCard({ team }) {
           {team.members && team.members.length > 0 ? (
             team.members.map((member) => (
               <div key={member.id} className="flex items-center gap-2">
-                <Avatar className="h-6 w-6">
-                  <AvatarImage
-                    src={member.avatar_url || getAvatarUrl(member.id || member.email, "user")}
-                    alt={member.full_name || "User"}
-                  />
-                  <AvatarFallback className="text-xs bg-navy-700 text-white">
-                    {getInitials(member.full_name || member.email)}
-                  </AvatarFallback>
-                </Avatar>
+                <OptimizedAvatar
+                  userId={member.id}
+                  email={member.email}
+                  name={member.full_name}
+                  fallbackUrl={member.avatar_url}
+                  size="sm"
+                />
                 <div className="flex flex-1 items-center justify-between">
                   <span className="text-sm text-white">{member.full_name || "Unknown User"}</span>
                   <span className="text-xs text-slate-400">{member.total_points || 0} pts</span>

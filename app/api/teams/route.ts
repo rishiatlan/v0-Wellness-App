@@ -1,27 +1,61 @@
-import { type NextRequest, NextResponse } from "next/server"
-import { checkApiAuth } from "@/lib/api-auth-check"
+import { NextResponse } from "next/server"
+import { createServiceRoleClient } from "@/utils/supabase/service"
 
-export async function GET(req: NextRequest) {
-  // Check authentication - much more efficient than middleware
-  const auth = await checkApiAuth(req)
-  if (auth === null) {
-    // Public route, continue
-  } else if ("error" in auth) {
-    // Auth check returned an error response
-    return auth
-  }
-
-  // Auth check passed, we have session and supabase client
-  const { session, supabase } = auth
-
+export async function GET() {
   try {
-    const { data, error } = await supabase.from("teams").select("*")
+    console.log("Teams API route called")
 
-    if (error) throw error
+    // Use service role client for reliable access
+    const serviceClient = createServiceRoleClient()
 
-    return NextResponse.json({ teams: data })
-  } catch (error: any) {
-    console.error("Error fetching teams:", error)
+    if (!serviceClient) {
+      console.error("Failed to create service client")
+      return NextResponse.json({ error: "Failed to create service client" }, { status: 500 })
+    }
+
+    // Fetch teams with error handling
+    const { data: teams, error } = await serviceClient
+      .from("teams")
+      .select("*")
+      .order("total_points", { ascending: false })
+
+    if (error) {
+      console.error("Error fetching teams:", error)
+      return NextResponse.json({ error: "Failed to fetch teams", details: error.message }, { status: 500 })
+    }
+
+    // Process teams to include member count
+    const teamsWithMembers = []
+
+    for (const team of teams || []) {
+      try {
+        // Get members for this team
+        const { data: members, error: membersError } = await serviceClient
+          .from("users")
+          .select("id")
+          .eq("team_id", team.id)
+
+        if (membersError) {
+          console.error(`Error fetching members for team ${team.id}:`, membersError)
+        }
+
+        teamsWithMembers.push({
+          ...team,
+          memberCount: members?.length || 0,
+        })
+      } catch (error) {
+        console.error(`Error processing team ${team.id}:`, error)
+        teamsWithMembers.push({
+          ...team,
+          memberCount: 0,
+        })
+      }
+    }
+
+    console.log(`Successfully fetched ${teamsWithMembers.length} teams`)
+    return NextResponse.json({ teams: teamsWithMembers })
+  } catch (error) {
+    console.error("Exception in teams API route:", error)
     return NextResponse.json({ error: "Failed to fetch teams", details: error.message }, { status: 500 })
   }
 }

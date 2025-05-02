@@ -21,12 +21,21 @@ export async function getChallengeStatus() {
 
     // Get values directly from the columns
     const started = data?.challenge_started === true
-    const startDate = data?.challenge_start_date ? new Date(data.challenge_start_date) : null
+
+    // Use the fixed May 5, 2025 date if no date is set in the database
+    // Month is 0-indexed in JavaScript Date, so 4 = May
+    const defaultStartDate = new Date(2025, 4, 5, 0, 0, 0, 0)
+    const startDate = data?.challenge_start_date ? new Date(data.challenge_start_date) : defaultStartDate
 
     return { started, startDate }
   } catch (error: any) {
     console.error("Error in getChallengeStatus:", error)
-    return { started: false, error: error.message }
+    // Return a default date if there's an error
+    return {
+      started: false,
+      startDate: new Date(2025, 4, 5, 0, 0, 0, 0),
+      error: error.message,
+    }
   }
 }
 

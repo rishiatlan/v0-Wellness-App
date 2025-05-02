@@ -1,83 +1,132 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { AlertCircle, Clock } from "lucide-react"
+import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { X } from "lucide-react"
 
 interface PreLaunchBannerProps {
-  launchDate: Date
+  launchDate: Date | string
   isChallengeLive?: boolean
 }
 
 export function PreLaunchBanner({ launchDate, isChallengeLive = false }: PreLaunchBannerProps) {
-  const [timeRemaining, setTimeRemaining] = useState<string>("")
-  const [dismissed, setDismissed] = useState<boolean>(false)
+  const [dismissed, setDismissed] = useState(false)
+  const [timeRemaining, setTimeRemaining] = useState("")
+  const [days, setDays] = useState(0)
+  const [hours, setHours] = useState(0)
+  const [minutes, setMinutes] = useState(0)
+  const [seconds, setSeconds] = useState(0)
+
+  // Convert string to Date if needed
+  const parsedLaunchDate = launchDate instanceof Date ? launchDate : new Date(launchDate)
+
+  // Handle invalid date
+  const isValidDate = !isNaN(parsedLaunchDate.getTime())
 
   useEffect(() => {
-    // If challenge is already live, don't show the banner
-    if (isChallengeLive) {
+    // Don't show banner if challenge is live or date is invalid
+    if (isChallengeLive || !isValidDate) {
       setDismissed(true)
       return
     }
 
-    // Check if user has dismissed the banner
-    const isDismissed = localStorage.getItem("preLaunchBannerDismissed")
-    if (isDismissed) {
-      setDismissed(true)
-    }
-
-    // Update countdown timer
-    const updateCountdown = () => {
+    const calculateTimeRemaining = () => {
       const now = new Date()
-      const diff = launchDate.getTime() - now.getTime()
+      const difference = parsedLaunchDate.getTime() - now.getTime()
 
-      if (diff <= 0) {
-        setTimeRemaining("Challenge is starting now!")
+      if (difference <= 0) {
+        // Challenge has started, refresh the page
+        setDismissed(true)
+        window.location.reload()
         return
       }
 
-      const days = Math.floor(diff / (1000 * 60 * 60 * 24))
-      const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
-      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
-      const seconds = Math.floor((diff % (1000 * 60)) / 1000)
+      // Calculate time components
+      const days = Math.floor(difference / (1000 * 60 * 60 * 24))
+      const hours = Math.floor((difference % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
+      const minutes = Math.floor((difference % (1000 * 60 * 60)) / (1000 * 60))
+      const seconds = Math.floor((difference % (1000 * 60)) / 1000)
 
-      setTimeRemaining(`${days}d ${hours}h ${minutes}m ${seconds}s`)
+      setDays(days)
+      setHours(hours)
+      setMinutes(minutes)
+      setSeconds(seconds)
+
+      // Format for screen readers
+      setTimeRemaining(`${days} days, ${hours} hours, ${minutes} minutes, and ${seconds} seconds`)
     }
 
-    updateCountdown()
-    const interval = setInterval(updateCountdown, 1000)
+    // Calculate immediately and then set interval
+    calculateTimeRemaining()
+    const interval = setInterval(calculateTimeRemaining, 1000)
 
     return () => clearInterval(interval)
-  }, [launchDate, isChallengeLive])
+  }, [isChallengeLive, parsedLaunchDate, isValidDate])
 
-  const handleDismiss = () => {
-    localStorage.setItem("preLaunchBannerDismissed", "true")
-    setDismissed(true)
-  }
-
-  if (dismissed || isChallengeLive) {
+  // Don't render if dismissed, challenge is live, or date is invalid
+  if (dismissed || isChallengeLive || !isValidDate) {
     return null
   }
 
+  // Format the launch date for display
+  const formattedDate = parsedLaunchDate.toLocaleDateString(undefined, {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  })
+
+  const formattedTime = parsedLaunchDate.toLocaleTimeString(undefined, {
+    hour: "2-digit",
+    minute: "2-digit",
+  })
+
   return (
-    <Alert variant="destructive" className="mb-4 border-red-600 bg-red-100 dark:bg-red-900/20">
-      <AlertCircle className="h-5 w-5" />
-      <div className="flex-1">
-        <AlertTitle className="text-lg font-semibold">🚨 Challenge hasn't started yet!</AlertTitle>
-        <AlertDescription className="mt-1">
-          <p className="mb-2">
-            You can log in, but the challenge hasn't started yet! All points and teams go live soon.
-          </p>
-          <div className="flex items-center gap-2 font-mono text-sm font-bold">
-            <Clock className="h-4 w-4" />
-            <span>Countdown: {timeRemaining}</span>
+    <div className="w-full bg-primary/10 border-b border-primary/20 py-2 px-4">
+      <Card className="border-primary/20 bg-transparent shadow-none">
+        <CardContent className="p-2 flex flex-col sm:flex-row items-center justify-between">
+          <div className="flex flex-col sm:flex-row items-center gap-2 text-center sm:text-left">
+            <span className="font-semibold text-primary">
+              Challenge starts on {formattedDate} at {formattedTime}
+            </span>
+
+            <div className="flex gap-2 items-center" aria-live="polite" aria-atomic="true">
+              <span className="sr-only">Time remaining: {timeRemaining}</span>
+
+              <div className="bg-primary/10 rounded px-2 py-1">
+                <span className="font-mono text-lg font-bold">{days.toString().padStart(2, "0")}</span>
+                <span className="text-xs">days</span>
+              </div>
+
+              <div className="bg-primary/10 rounded px-2 py-1">
+                <span className="font-mono text-lg font-bold">{hours.toString().padStart(2, "0")}</span>
+                <span className="text-xs">hrs</span>
+              </div>
+
+              <div className="bg-primary/10 rounded px-2 py-1">
+                <span className="font-mono text-lg font-bold">{minutes.toString().padStart(2, "0")}</span>
+                <span className="text-xs">min</span>
+              </div>
+
+              <div className="bg-primary/10 rounded px-2 py-1">
+                <span className="font-mono text-lg font-bold">{seconds.toString().padStart(2, "0")}</span>
+                <span className="text-xs">sec</span>
+              </div>
+            </div>
           </div>
-        </AlertDescription>
-      </div>
-      <Button variant="outline" size="sm" onClick={handleDismiss} className="ml-auto">
-        Dismiss
-      </Button>
-    </Alert>
+
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 shrink-0"
+            onClick={() => setDismissed(true)}
+            aria-label="Dismiss countdown"
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </CardContent>
+      </Card>
+    </div>
   )
 }

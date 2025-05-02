@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { AlertCircle, Loader2 } from "lucide-react"
+import { AlertCircle, Loader2, Info } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 
 export default function LoginPage() {
@@ -19,20 +19,25 @@ export default function LoginPage() {
   const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [message, setMessage] = useState<string | null>(null)
   const router = useRouter()
   const searchParams = useSearchParams()
   const { user, session } = useAuth()
 
-  // Get error and callbackUrl from URL parameters
+  // Get parameters from URL
   const errorParam = searchParams?.get("error")
+  const messageParam = searchParams?.get("message")
   const callbackUrl = searchParams?.get("callbackUrl") || "/daily-tracker"
 
-  // Set error from URL parameter if present
+  // Set error or message from URL parameters
   useEffect(() => {
     if (errorParam) {
       setError(decodeURIComponent(errorParam))
     }
-  }, [errorParam])
+    if (messageParam) {
+      setMessage(decodeURIComponent(messageParam))
+    }
+  }, [errorParam, messageParam])
 
   // Redirect if already logged in
   useEffect(() => {
@@ -48,11 +53,30 @@ export default function LoginPage() {
     setError(null)
 
     try {
+      // Validate email format
+      if (!email.includes("@") || !email.includes(".")) {
+        setError("Please enter a valid email address")
+        setLoading(false)
+        return
+      }
+
+      // Validate password length
+      if (password.length < 6) {
+        setError("Password must be at least 6 characters")
+        setLoading(false)
+        return
+      }
+
       console.log("Attempting login for:", email)
       const { session, user } = await signIn(email, password)
 
       if (session && user) {
         console.log("Login successful, redirecting to:", callbackUrl)
+
+        // Store last login date for streak calculation
+        localStorage.setItem("lastLogin", new Date().toISOString().split("T")[0])
+
+        // Redirect to the callback URL or default page
         router.push(callbackUrl)
       } else {
         console.error("Login succeeded but no session or user returned")
@@ -60,7 +84,17 @@ export default function LoginPage() {
       }
     } catch (err: any) {
       console.error("Login error:", err)
-      setError(err.message || "Failed to sign in")
+
+      // Provide more user-friendly error messages
+      if (err.message?.includes("Invalid login")) {
+        setError("Invalid email or password. Please check your credentials and try again.")
+      } else if (err.message?.includes("Email not confirmed")) {
+        setError("Please verify your email address before logging in.")
+      } else if (err.message?.includes("rate limit")) {
+        setError("Too many login attempts. Please try again later.")
+      } else {
+        setError(err.message || "Failed to sign in. Please try again.")
+      }
     } finally {
       setLoading(false)
     }
@@ -80,6 +114,14 @@ export default function LoginPage() {
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
+
+          {message && (
+            <Alert className="mb-4 bg-blue-50 text-blue-800 dark:bg-blue-900/20 dark:text-blue-300">
+              <Info className="h-4 w-4" />
+              <AlertDescription>{message}</AlertDescription>
+            </Alert>
+          )}
+
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
@@ -90,6 +132,8 @@ export default function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
+                autoComplete="email"
+                className="focus:ring-2 focus:ring-primary focus:border-primary"
               />
             </div>
             <div className="space-y-2">
@@ -105,6 +149,8 @@ export default function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
+                autoComplete="current-password"
+                className="focus:ring-2 focus:ring-primary focus:border-primary"
               />
             </div>
             <Button type="submit" className="w-full" disabled={loading}>

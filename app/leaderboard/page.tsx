@@ -5,7 +5,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Search, Trophy, Users, Loader2, RefreshCw } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
@@ -16,7 +15,7 @@ import {
   searchTeams,
 } from "@/app/actions/leaderboard-actions"
 import { Button } from "@/components/ui/button"
-import { getAvatarUrl, getInitials } from "@/lib/avatar-utils"
+import { OptimizedAvatar } from "@/components/optimized-avatar"
 
 // Helper function to extract name from email
 function extractNameFromEmail(email: string): string {
@@ -72,6 +71,24 @@ export default function Leaderboard() {
 
     fetchLeaderboardData()
   }, [toast])
+
+  // Add a timeout to prevent infinite loading
+  useEffect(() => {
+    if (loading) {
+      const timeout = setTimeout(() => {
+        if (loading) {
+          setLoading(false)
+          toast({
+            title: "Loading timed out",
+            description: "Please try refreshing the page",
+            variant: "destructive",
+          })
+        }
+      }, 15000) // 15 seconds timeout
+
+      return () => clearTimeout(timeout)
+    }
+  }, [loading, toast])
 
   useEffect(() => {
     const handleSearch = async () => {
@@ -240,15 +257,13 @@ export default function Leaderboard() {
                       >
                         {individual.rank}
                       </div>
-                      <Avatar className="h-10 w-10 border-2 border-navy-700">
-                        <AvatarImage
-                          src={individual.avatar_url || getAvatarUrl(individual.id || individual.email, "user")}
-                          alt={individual.full_name || extractNameFromEmail(individual.email)}
-                        />
-                        <AvatarFallback className="bg-navy-700 text-white">
-                          {getInitials(individual.full_name || individual.email)}
-                        </AvatarFallback>
-                      </Avatar>
+                      <OptimizedAvatar
+                        userId={individual.id}
+                        email={individual.email}
+                        name={individual.full_name || extractNameFromEmail(individual.email)}
+                        fallbackUrl={individual.avatar_url}
+                        className="border-2 border-navy-700"
+                      />
                       <div>
                         <div className="font-medium text-white flex items-center gap-1">
                           {individual.full_name || extractNameFromEmail(individual.email)}
@@ -307,15 +322,13 @@ export default function Leaderboard() {
                       >
                         {index + 1}
                       </div>
-                      <Avatar className="h-10 w-10 border-2 border-navy-700">
-                        <AvatarImage
-                          src={team.banner_url || getAvatarUrl(team.id || `team-${index}`, "team")}
-                          alt={team.name || `Team ${index + 1}`}
-                        />
-                        <AvatarFallback className="bg-navy-700 text-white">
-                          {getInitials(team.name || `T${index + 1}`)}
-                        </AvatarFallback>
-                      </Avatar>
+                      <OptimizedAvatar
+                        userId={team.id}
+                        name={team.name || `Team ${index + 1}`}
+                        type="team"
+                        fallbackUrl={team.banner_url}
+                        className="border-2 border-navy-700"
+                      />
                       <div>
                         <div className="font-medium text-white flex items-center gap-1">
                           {team.name || `Team ${index + 1}`}

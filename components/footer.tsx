@@ -1,44 +1,27 @@
-"use client"
-
 import Link from "next/link"
-import Image from "next/image"
-import { getEmailAssetUrl, getFallbackAssetUrl } from "@/lib/asset-utils"
-import { useState } from "react"
+import { APP_VERSION } from "@/lib/env-vars"
 
 export default function Footer() {
-  const [imageError, setImageError] = useState(false)
-  const logoUrl = imageError ? getFallbackAssetUrl("wellness.png") : getEmailAssetUrl("wellness.png")
+  const currentYear = new Date().getFullYear()
 
   return (
-    <footer className="border-t py-6 md:py-8">
+    <footer className="w-full border-t border-navy-800 bg-navy-950 py-6 text-white">
       <div className="container flex flex-col items-center justify-between gap-4 md:flex-row">
-        <div className="flex items-center gap-2">
-          <Image
-            src={logoUrl || "/placeholder.svg"}
-            width={24}
-            height={24}
-            alt="Spring into Wellness Logo"
-            className="object-contain"
-            onError={() => setImageError(true)}
-            unoptimized
-          />
-          <span className="text-sm font-medium">Spring into Wellness 2025</span>
+        <div className="flex flex-col items-center gap-2 md:flex-row md:gap-4">
+          <p className="text-sm text-gray-400">&copy; {currentYear} Atlan. All rights reserved.</p>
+          <div className="flex items-center gap-4">
+            <Link href="/privacy" className="text-sm text-gray-400 hover:text-white">
+              Privacy Policy
+            </Link>
+            <Link href="/terms" className="text-sm text-gray-400 hover:text-white">
+              Terms of Service
+            </Link>
+            <Link href="/contact" className="text-sm text-gray-400 hover:text-white">
+              Contact
+            </Link>
+          </div>
         </div>
-
-        <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
-          <Link href="/health" className="hover:underline">
-            Health Info
-          </Link>
-          <Link href="/privacy" className="hover:underline">
-            Privacy
-          </Link>
-          <Link href="/terms" className="hover:underline">
-            Terms
-          </Link>
-          <Link href="/contact" className="hover:underline">
-            Contact
-          </Link>
-        </div>
+        <div className="text-xs text-gray-500">Version {APP_VERSION}</div>
       </div>
     </footer>
   )

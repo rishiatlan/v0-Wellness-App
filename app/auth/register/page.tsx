@@ -1,13 +1,15 @@
 import Link from "next/link"
 import { redirect } from "next/navigation"
 import { cookies } from "next/headers"
-import { createClient } from "@/lib/supabase/server"
+import { createServerClient } from "@/lib/supabase/server"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import Image from "next/image"
 import { isAtlanEmail } from "@/lib/is-atlan-email"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { AlertCircle } from "lucide-react"
 
 export default async function Register({
   searchParams,
@@ -15,11 +17,9 @@ export default async function Register({
   searchParams: { message: string; callbackUrl: string }
 }) {
   const cookieStore = cookies()
+  const supabase = createServerClient(cookieStore)
 
   try {
-    // Since createClient is now async, we need to await it
-    const supabase = await createClient(cookieStore)
-
     const {
       data: { session },
     } = await supabase.auth.getSession()
@@ -36,13 +36,22 @@ export default async function Register({
   const signUp = async (formData: FormData) => {
     "use server"
 
-    const origin = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
+    const origin = process.env.NEXT_PUBLIC_APP_URL || "https://v0-spring-wellness-app.vercel.app"
     const email = formData.get("email") as string
     const password = formData.get("password") as string
     const fullName = formData.get("fullName") as string
     const cookieStore = cookies()
 
     try {
+      // Validate inputs
+      if (!email || !password || !fullName) {
+        return redirect(
+          `/auth/register?message=${encodeURIComponent("All fields are required.")}${
+            searchParams.callbackUrl ? `&callbackUrl=${encodeURIComponent(searchParams.callbackUrl)}` : ""
+          }`,
+        )
+      }
+
       // Check if it's an Atlan email
       if (!isAtlanEmail(email)) {
         return redirect(
@@ -52,9 +61,19 @@ export default async function Register({
         )
       }
 
-      // Since createClient is now async, we need to await it
-      const supabase = await createClient(cookieStore)
+      // Validate password strength
+      if (password.length < 6) {
+        return redirect(
+          `/auth/register?message=${encodeURIComponent("Password must be at least 6 characters long.")}${
+            searchParams.callbackUrl ? `&callbackUrl=${encodeURIComponent(searchParams.callbackUrl)}` : ""
+          }`,
+        )
+      }
 
+      // Create Supabase client
+      const supabase = createServerClient(cookieStore)
+
+      // Attempt to sign up the user
       const { error } = await supabase.auth.signUp({
         email,
         password,
@@ -67,6 +86,7 @@ export default async function Register({
       })
 
       if (error) {
+        console.error("Signup error:", error)
         return redirect(
           `/auth/register?message=${encodeURIComponent(error.message)}${
             searchParams.callbackUrl ? `&callbackUrl=${encodeURIComponent(searchParams.callbackUrl)}` : ""
@@ -75,7 +95,7 @@ export default async function Register({
       }
 
       return redirect("/auth/login?message=Check your email to confirm your account")
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error signing up:", error)
       return redirect(
         `/auth/register?message=${encodeURIComponent("An unexpected error occurred. Please try again.")}${
@@ -102,9 +122,10 @@ export default async function Register({
             <CardTitle className="text-2xl font-bold tracking-tight">Create an account</CardTitle>
             <CardDescription className="text-gray-400">Enter your details to get started</CardDescription>
             {searchParams?.message && (
-              <p className="mt-2 rounded-lg bg-destructive/15 p-3 text-center text-sm text-destructive">
-                {searchParams.message}
-              </p>
+              <Alert variant="destructive" className="mt-2 bg-destructive/15 text-destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{searchParams.message}</AlertDescription>
+              </Alert>
             )}
           </CardHeader>
           <form action={signUp}>

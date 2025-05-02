@@ -443,7 +443,7 @@ export async function calculateTeamCumulativeScore(teamId: string) {
 // Updated function to check for Wellness Wednesday bonus
 // Now requires exactly 5 team members, each with 30+ points, and awards 25 bonus points
 export async function checkWellnessWednesdayBonus(teamId: string, date: string) {
-  const supabase = createServerActionClient<Database>({ cookies })
+  const serviceClient = createServiceRoleClient()
 
   try {
     // Check if the date is a Wednesday
@@ -454,7 +454,10 @@ export async function checkWellnessWednesdayBonus(teamId: string, date: string) 
     }
 
     // Get all team members
-    const { data: teamMembers, error: membersError } = await supabase.from("users").select("id").eq("team_id", teamId)
+    const { data: teamMembers, error: membersError } = await serviceClient
+      .from("users")
+      .select("id")
+      .eq("team_id", teamId)
 
     if (membersError || !teamMembers) {
       console.error("Error fetching team members:", membersError)
@@ -473,7 +476,7 @@ export async function checkWellnessWednesdayBonus(teamId: string, date: string) 
     const memberIds = teamMembers.map((member) => member.id)
 
     // Get the total points for each member on this specific day
-    const { data: dailyPoints, error: pointsError } = await supabase
+    const { data: dailyPoints, error: pointsError } = await serviceClient
       .from("daily_logs")
       .select("user_id, points")
       .in("user_id", memberIds)
@@ -504,10 +507,27 @@ export async function checkWellnessWednesdayBonus(teamId: string, date: string) 
       }
     }
 
+    // Check if this Wednesday bonus has already been awarded
+    const { data: existingBonus, error: existingBonusError } = await serviceClient
+      .from("wellness_wednesday")
+      .select("id")
+      .eq("team_id", teamId)
+      .eq("date", date)
+      .maybeSingle()
+
+    if (existingBonusError) {
+      console.error("Error checking existing bonus:", existingBonusError)
+      return { success: false, message: "Failed to check if bonus was already awarded" }
+    }
+
+    if (existingBonus) {
+      return { success: false, message: "Wellness Wednesday bonus has already been awarded for this date" }
+    }
+
     // Apply the 25-point bonus to the team
-    const { error: updateError } = await supabase
+    const { error: updateError } = await serviceClient
       .from("teams")
-      .update({ total_points: supabase.rpc("increment", { x: 25 }) })
+      .update({ total_points: serviceClient.rpc("increment", { x: 25 }) })
       .eq("id", teamId)
 
     if (updateError) {
@@ -515,8 +535,18 @@ export async function checkWellnessWednesdayBonus(teamId: string, date: string) 
       return { success: false, message: "Failed to apply team bonus" }
     }
 
-    revalidatePath("/team-challenge")
-    revalidatePath("/leaderboard")
+    // Record the bonus in the wellness_wednesday table
+    const { error: recordError } = await serviceClient.from("wellness_wednesday").insert({
+      team_id: teamId,
+      date: date,
+      bonus_achieved: true,
+      bonus_points: 25,
+    })
+
+    if (recordError) {
+      console.error("Error recording bonus:", recordError)
+      // Even if recording fails, the bonus was still applied
+    }
 
     return {
       success: true,

@@ -8,6 +8,9 @@ module.exports = {
   ],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ["var(--font-inter)", "system-ui", "sans-serif"],
+      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
@@ -53,10 +56,51 @@ module.exports = {
           700: "#415a91",
           800: "#334671",
           900: "#1e2a43",
-          950: "#111827",
+          950: "#0c1425",
         },
+      },
+      typography: {
+        DEFAULT: {
+          css: {
+            color: "hsl(var(--foreground))",
+            a: {
+              color: "hsl(var(--primary))",
+              "&:hover": {
+                color: "hsl(var(--primary))",
+              },
+            },
+            h1: {
+              color: "hsl(var(--foreground))",
+            },
+            h2: {
+              color: "hsl(var(--foreground))",
+            },
+            h3: {
+              color: "hsl(var(--foreground))",
+            },
+            h4: {
+              color: "hsl(var(--foreground))",
+            },
+            blockquote: {
+              color: "hsl(var(--foreground))",
+            },
+            "ol > li::before": {
+              color: "hsl(var(--foreground))",
+            },
+            "ul > li::before": {
+              backgroundColor: "hsl(var(--foreground))",
+            },
+            hr: {
+              borderColor: "hsl(var(--border))",
+            },
+          },
+        },
+      },
+      boxShadow: {
+        card: "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)",
+        "card-hover": "0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)",
       },
     },
   },
-  plugins: [],
+  plugins: [require("@tailwindcss/typography")],
 }

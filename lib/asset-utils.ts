@@ -1,55 +1,48 @@
-/**
- * Utility functions for handling asset URLs with proper error handling
- */
+// Cache for asset URLs to avoid repeated lookups
+const assetUrlCache = new Map<string, string>()
 
-// Base URL for email assets in Supabase storage
-const EMAIL_ASSETS_BASE_URL = "https://mqvcdyzqegzqfwvesoiz.supabase.co/storage/v1/object/public/email-assets/"
-
-// Base URL for public assets
-const PUBLIC_ASSETS_BASE_URL = "/"
-
-/**
- * Get the URL for an email asset from Supabase storage
- * @param assetName The name of the asset file
- * @returns The full URL to the asset
- */
+// Function to get asset URL with fallback
 export function getEmailAssetUrl(assetName: string): string {
-  try {
-    // Ensure the asset name is properly formatted
-    const formattedAssetName = assetName.startsWith("/") ? assetName.substring(1) : assetName
-    return `${EMAIL_ASSETS_BASE_URL}/${formattedAssetName}`
-  } catch (error) {
-    console.error("Error generating email asset URL:", error)
-    return getFallbackAssetUrl(assetName)
+  // Check cache first
+  if (assetUrlCache.has(assetName)) {
+    return assetUrlCache.get(assetName) as string
   }
+
+  // Try to get from public folder
+  const url = `/${assetName}`
+
+  // Store in cache
+  assetUrlCache.set(assetName, url)
+
+  return url
 }
 
-/**
- * Get a fallback URL for an asset from the public directory
- * @param assetName The name of the asset file
- * @returns The full URL to the public asset
- */
+// Function to get fallback asset URL
 export function getFallbackAssetUrl(assetName: string): string {
-  try {
-    // Ensure the asset name is properly formatted
-    const formattedAssetName = assetName.startsWith("/") ? assetName.substring(1) : assetName
-    return `${PUBLIC_ASSETS_BASE_URL}${formattedAssetName}`
-  } catch (error) {
-    console.error("Error generating fallback asset URL:", error)
-    return "/placeholder.svg"
+  // Check cache first
+  const cacheKey = `fallback-${assetName}`
+  if (assetUrlCache.has(cacheKey)) {
+    return assetUrlCache.get(cacheKey) as string
   }
+
+  // Generate a fallback URL
+  const url = `/placeholder.svg?height=32&width=32&query=wellness%20logo`
+
+  // Store in cache
+  assetUrlCache.set(cacheKey, url)
+
+  return url
 }
 
-/**
- * Check if a URL is valid
- * @param url The URL to check
- * @returns Boolean indicating if the URL is valid
- */
-export function isValidUrl(url: string): boolean {
-  try {
-    new URL(url)
-    return true
-  } catch (error) {
-    return false
-  }
+// Function to preload assets
+export function preloadAssets(assetNames: string[]): void {
+  if (typeof window === "undefined") return
+
+  assetNames.forEach((assetName) => {
+    const link = document.createElement("link")
+    link.rel = "preload"
+    link.as = "image"
+    link.href = getEmailAssetUrl(assetName)
+    document.head.appendChild(link)
+  })
 }

@@ -5,6 +5,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { getAvatarUrl, getInitials } from "@/lib/avatar-utils"
 import { Badge } from "@/components/ui/badge"
+import { WednesdayBonusChecker } from "./wednesday-bonus-checker"
+import { WednesdayBonusHistory } from "./wednesday-bonus-history"
 
 export const TeamDetails = ({ team, users }: { team: any; users: any[] }) => {
   const teamMembers = users.filter((user) => user.team_id === team.id)
@@ -43,6 +45,10 @@ export const TeamDetails = ({ team, users }: { team: any; users: any[] }) => {
         ) : (
           <p className="text-muted-foreground py-4 text-center">No members in this team</p>
         )}
+
+        {team && <WednesdayBonusChecker teamId={team.id} teamName={team.name} memberCount={teamMembers?.length || 0} />}
+
+        {team && <WednesdayBonusHistory teamId={team.id} />}
 
         <div className="flex justify-between pt-4 border-t">
           <p>Total Points:</p>

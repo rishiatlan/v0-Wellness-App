@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { createContext, useContext, useEffect, useState, useMemo, useCallback } from "react"
+import { createContext, useContext, useEffect, useState, useCallback } from "react"
 import type { Session, User } from "@supabase/supabase-js"
 import { supabase } from "./supabase-client"
 
@@ -28,6 +28,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Function to refresh the session
   const refreshSession = useCallback(async () => {
     try {
+      setLoading(true)
       const { data, error } = await supabase.auth.getSession()
       if (error) {
         throw error
@@ -78,16 +79,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [refreshSession])
 
   // Memoize the context value to prevent unnecessary re-renders
-  const value = useMemo(() => {
-    return {
-      user,
-      session,
-      loading,
-      error,
-      signOut,
-      refreshSession,
-    }
-  }, [user, session, loading, error, signOut, refreshSession])
+  const value = {
+    user,
+    session,
+    loading,
+    error,
+    signOut,
+    refreshSession,
+  }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

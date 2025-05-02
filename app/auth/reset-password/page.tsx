@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { AtSign, AlertCircle } from "lucide-react"
+import { AtSign, AlertCircle, Info, Loader2 } from "lucide-react"
 import Image from "next/image"
 
 export default function ResetPasswordPage() {
@@ -18,11 +18,21 @@ export default function ResetPasswordPage() {
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
+  const [emailValid, setEmailValid] = useState(true)
+
+  const validateEmail = (email: string) => {
+    setEmailValid(isAtlanEmail(email) || email === "")
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError("")
     setSuccess(false)
+
+    if (!email) {
+      setError("Email is required")
+      return
+    }
 
     if (!isAtlanEmail(email)) {
       setError("Only @atlan.com email addresses are allowed")
@@ -34,8 +44,15 @@ export default function ResetPasswordPage() {
     try {
       await resetPassword(email)
       setSuccess(true)
+      // Clear the form
+      setEmail("")
     } catch (error: any) {
-      setError(error.message)
+      console.error("Password reset error:", error)
+      if (error.message?.includes("rate limit")) {
+        setError("Too many reset attempts. Please try again later.")
+      } else {
+        setError(error.message || "Failed to send reset email. Please try again.")
+      }
     } finally {
       setLoading(false)
     }
@@ -45,12 +62,11 @@ export default function ResetPasswordPage() {
     <div className="container flex h-screen flex-col items-center justify-center max-w-md mx-auto px-4">
       <div className="mb-8 flex flex-col items-center text-center">
         <Image
-          src="https://mqvcdyzqegzqfwvesoiz.supabase.co/storage/v1/object/public/email-assets//wellness.png"
+          src="/wellness-logo.png"
           width={80}
           height={80}
           alt="Spring into Wellness Logo"
           className="object-contain"
-          unoptimized
         />
         <h1 className="mt-4 text-3xl font-bold">Spring into Wellness</h1>
         <p className="text-muted-foreground">Reset your password</p>
@@ -72,6 +88,7 @@ export default function ResetPasswordPage() {
 
             {success && (
               <Alert className="bg-green-50 text-green-800 dark:bg-green-900/20 dark:text-green-300">
+                <Info className="h-4 w-4" />
                 <AlertDescription>
                   Password reset email sent! Please check your inbox for further instructions.
                 </AlertDescription>
@@ -87,14 +104,16 @@ export default function ResetPasswordPage() {
                   type="email"
                   placeholder="you@atlan.com"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="pl-9"
+                  onChange={(e) => {
+                    setEmail(e.target.value)
+                    validateEmail(e.target.value)
+                  }}
+                  className={`pl-9 ${!emailValid ? "border-red-500 focus:border-red-500" : ""}`}
                   required
+                  disabled={loading || success}
                 />
               </div>
-              {email && !isAtlanEmail(email) && (
-                <p className="text-xs text-red-500">Only @atlan.com email addresses are allowed</p>
-              )}
+              {!emailValid && <p className="text-xs text-red-500">Only @atlan.com email addresses are allowed</p>}
             </div>
 
             <div className="text-xs text-muted-foreground space-y-1">
@@ -107,8 +126,17 @@ export default function ResetPasswordPage() {
               </ul>
             </div>
 
-            <Button type="submit" className="w-full" disabled={loading || success}>
-              {loading ? "Sending..." : "Send Reset Link"}
+            <Button type="submit" className="w-full" disabled={loading || success || !emailValid}>
+              {loading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Sending...
+                </>
+              ) : success ? (
+                "Email Sent"
+              ) : (
+                "Send Reset Link"
+              )}
             </Button>
           </form>
         </CardContent>

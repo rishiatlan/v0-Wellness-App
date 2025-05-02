@@ -2,8 +2,8 @@
 
 import type React from "react"
 
-import { useState } from "react"
-import { useRouter } from "next/navigation"
+import { useState, useEffect } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import Image from "next/image"
 import { supabase } from "@/lib/supabase"
@@ -101,8 +101,79 @@ export default function ResetPasswordConfirmPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [passwordFocused, setPasswordFocused] = useState(false)
+  const [tokenVerified, setTokenVerified] = useState(false)
+  const [verifyingToken, setVerifyingToken] = useState(true)
 
   const router = useRouter()
+  const searchParams = useSearchParams()
+
+  // Check for token on page load
+  useEffect(() => {
+    const verifyToken = async () => {
+      try {
+        setVerifyingToken(true)
+
+        // Check if we have a session already
+        const { data: sessionData } = await supabase.auth.getSession()
+
+        if (sessionData?.session) {
+          console.log("Session found, token is valid")
+          setTokenVerified(true)
+          setVerifyingToken(false)
+          return
+        }
+
+        // If we don't have a session, check for tokens in the URL
+        const access_token = searchParams.get("access_token")
+        const refresh_token = searchParams.get("refresh_token")
+        const type = searchParams.get("type")
+
+        if (access_token && refresh_token) {
+          console.log("Found tokens in URL, setting session")
+
+          // Set the session with the tokens
+          const { error } = await supabase.auth.setSession({
+            access_token,
+            refresh_token,
+          })
+
+          if (error) {
+            console.error("Error setting session:", error)
+            setError("Your password reset link has expired. Please request a new one.")
+            setVerifyingToken(false)
+            return
+          }
+
+          // Token is valid
+          setTokenVerified(true)
+
+          // Clean up the URL by removing the tokens
+          // This is important for security reasons
+          if (window.history.replaceState) {
+            const newUrl = window.location.pathname
+            window.history.replaceState({}, document.title, newUrl)
+          }
+        } else {
+          // No tokens found, check if we're in the callback flow
+          // In this case, the token might have been processed by the callback route
+          const { data } = await supabase.auth.getSession()
+
+          if (data.session) {
+            setTokenVerified(true)
+          } else {
+            setError("No valid reset token found. Please request a new password reset link.")
+          }
+        }
+      } catch (error: any) {
+        console.error("Error verifying token:", error)
+        setError("Failed to verify your reset token. Please try again or request a new link.")
+      } finally {
+        setVerifyingToken(false)
+      }
+    }
+
+    verifyToken()
+  }, [searchParams])
 
   // Check if password meets all requirements
   const passwordMeetsRequirements = () => {
@@ -174,93 +245,107 @@ export default function ResetPasswordConfirmPage() {
           <CardDescription>Enter a new password for your account</CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {error && (
-              <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
-
-            {success && (
-              <Alert className="bg-green-50 text-green-800 dark:bg-green-900/20 dark:text-green-300">
-                <CheckCircle className="h-4 w-4" />
-                <AlertDescription>Your password has been reset successfully! Redirecting to login...</AlertDescription>
-              </Alert>
-            )}
-
-            <div className="space-y-2">
-              <Label htmlFor="password">New Password</Label>
-              <div className="relative">
-                <KeyRound className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="password"
-                  type={showPassword ? "text" : "password"}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  onFocus={() => setPasswordFocused(true)}
-                  onBlur={() => setPasswordFocused(false)}
-                  className="pl-9"
-                  placeholder="Enter new password"
-                  required
-                  disabled={loading || success}
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="absolute right-1 top-1 h-8 w-8"
-                  onClick={() => setShowPassword(!showPassword)}
-                  disabled={loading || success}
-                >
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  <span className="sr-only">{showPassword ? "Hide password" : "Show password"}</span>
-                </Button>
-              </div>
-
-              {/* Show password requirements when password field is focused or has content */}
-              {(passwordFocused || password.length > 0) && <PasswordRequirements password={password} />}
+          {verifyingToken ? (
+            <div className="flex justify-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+              <span className="sr-only">Verifying your reset link...</span>
             </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="confirmPassword">Confirm Password</Label>
-              <div className="relative">
-                <KeyRound className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="confirmPassword"
-                  type={showConfirmPassword ? "text" : "password"}
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="pl-9"
-                  placeholder="Confirm new password"
-                  required
-                  disabled={loading || success}
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="absolute right-1 top-1 h-8 w-8"
-                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  disabled={loading || success}
-                >
-                  {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  <span className="sr-only">{showConfirmPassword ? "Hide password" : "Show password"}</span>
-                </Button>
-              </div>
-              {confirmPassword && password !== confirmPassword && (
-                <p className="text-xs text-red-500">Passwords do not match</p>
+          ) : !tokenVerified ? (
+            <Alert variant="destructive" className="mb-4">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{error || "Invalid or expired reset link. Please request a new one."}</AlertDescription>
+            </Alert>
+          ) : (
+            <form onSubmit={handleSubmit} className="space-y-4">
+              {error && (
+                <Alert variant="destructive">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>{error}</AlertDescription>
+                </Alert>
               )}
-            </div>
 
-            <Button
-              type="submit"
-              className="w-full"
-              disabled={loading || success || !passwordMeetsRequirements() || password !== confirmPassword}
-            >
-              {loading ? "Resetting Password..." : "Reset Password"}
-            </Button>
-          </form>
+              {success && (
+                <Alert className="bg-green-50 text-green-800 dark:bg-green-900/20 dark:text-green-300">
+                  <CheckCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    Your password has been reset successfully! Redirecting to login...
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              <div className="space-y-2">
+                <Label htmlFor="password">New Password</Label>
+                <div className="relative">
+                  <KeyRound className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id="password"
+                    type={showPassword ? "text" : "password"}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    onFocus={() => setPasswordFocused(true)}
+                    onBlur={() => setPasswordFocused(false)}
+                    className="pl-9"
+                    placeholder="Enter new password"
+                    required
+                    disabled={loading || success}
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-1 top-1 h-8 w-8"
+                    onClick={() => setShowPassword(!showPassword)}
+                    disabled={loading || success}
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    <span className="sr-only">{showPassword ? "Hide password" : "Show password"}</span>
+                  </Button>
+                </div>
+
+                {/* Show password requirements when password field is focused or has content */}
+                {(passwordFocused || password.length > 0) && <PasswordRequirements password={password} />}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="confirmPassword">Confirm Password</Label>
+                <div className="relative">
+                  <KeyRound className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id="confirmPassword"
+                    type={showConfirmPassword ? "text" : "password"}
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className="pl-9"
+                    placeholder="Confirm new password"
+                    required
+                    disabled={loading || success}
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-1 top-1 h-8 w-8"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    disabled={loading || success}
+                  >
+                    {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    <span className="sr-only">{showConfirmPassword ? "Hide password" : "Show password"}</span>
+                  </Button>
+                </div>
+                {confirmPassword && password !== confirmPassword && (
+                  <p className="text-xs text-red-500">Passwords do not match</p>
+                )}
+              </div>
+
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={loading || success || !passwordMeetsRequirements() || password !== confirmPassword}
+              >
+                {loading ? "Resetting Password..." : "Reset Password"}
+              </Button>
+            </form>
+          )}
         </CardContent>
         <CardFooter className="flex justify-center">
           <p className="text-sm text-muted-foreground">

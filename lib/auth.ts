@@ -3,6 +3,7 @@
 
 import { supabase } from "./supabase"
 import { isAtlanEmail as isAtlanEmailOriginal } from "@/lib/is-atlan-email"
+import { logAuthEvent } from "./auth-utils"
 
 // Re-export the isAtlanEmail function for backward compatibility
 export const isAtlanEmail = isAtlanEmailOriginal
@@ -14,7 +15,7 @@ export async function signUp(email: string, password: string, fullName: string) 
   }
 
   try {
-    console.log("Attempting to sign up user:", email)
+    logAuthEvent("Attempting to sign up user", { email })
 
     const { data, error } = await supabase.auth.signUp({
       email,
@@ -28,21 +29,21 @@ export async function signUp(email: string, password: string, fullName: string) 
     })
 
     if (error) {
-      console.error("Supabase signup error:", error.message, error)
+      logAuthEvent("Supabase signup error", { error: error.message })
       throw error
     }
 
-    console.log("Signup successful:", data)
+    logAuthEvent("Signup successful", { userId: data.user?.id })
     return data
   } catch (error: any) {
-    console.error("Exception during signup:", error)
+    logAuthEvent("Exception during signup", { error: error.message })
     throw new Error(error.message)
   }
 }
 
 // Sign in with email and password
 export async function signIn(email: string, password: string) {
-  console.log("Authentication attempt in progress for:", email)
+  logAuthEvent("Authentication attempt in progress", { email })
 
   try {
     // Clear any existing sessions first to prevent conflicts
@@ -55,7 +56,7 @@ export async function signIn(email: string, password: string) {
     })
 
     if (error) {
-      console.error("Supabase auth error:", error.message, error)
+      logAuthEvent("Supabase auth error", { error: error.message })
 
       // Check for specific error types to provide better user feedback
       if (error.message.includes("Invalid login credentials")) {
@@ -72,16 +73,18 @@ export async function signIn(email: string, password: string) {
 
     // Verify the session was created
     if (!data.session) {
-      console.error("No session created after successful authentication")
+      logAuthEvent("No session created after successful authentication")
       throw new Error("Authentication succeeded but no session was created")
     }
 
-    console.log("Authentication successful for:", email)
-    console.log("Session expires at:", new Date(data.session.expires_at! * 1000).toLocaleString())
+    logAuthEvent("Authentication successful", {
+      email,
+      expiresAt: new Date(data.session.expires_at! * 1000).toLocaleString(),
+    })
 
     return data
   } catch (error: any) {
-    console.error("Sign in function caught error:", error)
+    logAuthEvent("Sign in function caught error", { error: error.message })
     throw new Error(error.message || "Authentication failed")
   }
 }
@@ -89,18 +92,18 @@ export async function signIn(email: string, password: string) {
 // Sign out
 export async function signOut() {
   try {
-    console.log("Signing out user")
+    logAuthEvent("Signing out user")
     const { error } = await supabase.auth.signOut()
     if (error) {
-      console.error("Error signing out:", error)
+      logAuthEvent("Error signing out", { error: error.message })
       throw error
     }
 
     // Redirect to home page after sign out
     window.location.href = "/"
     return { success: true }
-  } catch (error) {
-    console.error("Exception during sign out:", error)
+  } catch (error: any) {
+    logAuthEvent("Exception during sign out", { error: error.message })
     return { success: false, error }
   }
 }
@@ -112,13 +115,22 @@ export async function resetPassword(email: string) {
   }
 
   try {
+    logAuthEvent("Password reset requested", { email })
+
     // Update the redirectTo URL to match the exact path we've created
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: `${window.location.origin}/auth/reset-password/confirm`,
     })
 
-    if (error) throw error
+    if (error) {
+      logAuthEvent("Password reset error", { error: error.message })
+      throw error
+    }
+
+    logAuthEvent("Password reset email sent", { email })
+    return { success: true }
   } catch (error: any) {
+    logAuthEvent("Exception during password reset", { error: error.message })
     throw new Error(error.message)
   }
 }
@@ -129,13 +141,13 @@ export async function getUserProfile(userId: string) {
     const { data, error } = await supabase.from("users").select("*").eq("id", userId).maybeSingle()
 
     if (error) {
-      console.error("Error fetching user profile:", error)
+      logAuthEvent("Error fetching user profile", { error: error.message, userId })
       throw error
     }
 
     return data
   } catch (error: any) {
-    console.error("Exception in getUserProfile:", error)
+    logAuthEvent("Exception in getUserProfile", { error: error.message, userId })
     throw new Error(error.message)
   }
 }
@@ -143,18 +155,18 @@ export async function getUserProfile(userId: string) {
 // Test Supabase connection
 export async function testSupabaseConnection() {
   try {
-    console.log("Testing Supabase connection...")
+    logAuthEvent("Testing Supabase connection")
     const { data, error } = await supabase.from("users").select("count").limit(1)
 
     if (error) {
-      console.error("Supabase connection test error:", error)
+      logAuthEvent("Supabase connection test error", { error: error.message })
       return { success: false, error: error.message }
     }
 
-    console.log("Supabase connection successful:", data)
+    logAuthEvent("Supabase connection successful", { data })
     return { success: true, data }
   } catch (error: any) {
-    console.error("Supabase connection test exception:", error)
+    logAuthEvent("Supabase connection test exception", { error: error.message })
     return { success: false, error: error.message }
   }
 }
@@ -165,13 +177,13 @@ export async function getUserProfileClientSafe(userId: string) {
     const { data, error } = await supabase.from("users").select("*").eq("id", userId).maybeSingle()
 
     if (error) {
-      console.error("Error fetching user profile:", error)
+      logAuthEvent("Error fetching user profile (client safe)", { error: error.message, userId })
       throw error
     }
 
     return data
   } catch (error: any) {
-    console.error("Exception in getUserProfile:", error)
+    logAuthEvent("Exception in getUserProfile (client safe)", { error: error.message, userId })
     throw new Error(error.message)
   }
 }
@@ -180,12 +192,12 @@ export async function isAuthenticated() {
   try {
     const { data, error } = await supabase.auth.getSession()
     if (error) {
-      console.error("Error checking authentication:", error)
+      logAuthEvent("Error checking authentication", { error: error.message })
       return false
     }
     return !!data.session
-  } catch (error) {
-    console.error("Exception checking authentication:", error)
+  } catch (error: any) {
+    logAuthEvent("Exception checking authentication", { error: error.message })
     return false
   }
 }

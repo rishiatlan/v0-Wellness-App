@@ -1,11 +1,9 @@
-"use server"
-
-import { createServerClient as createSupabaseServerClient } from "@supabase/ssr"
-import type { cookies } from "next/headers"
+import { createServerClient as createServerClientSupabase } from "@supabase/ssr"
+import { cookies } from "next/headers"
 import type { Database } from "@/types/supabase"
 
 // Create a Supabase client for server components (safe for /app directory)
-export async function createServerClient(cookieStore: ReturnType<typeof cookies>) {
+export async function createClient() {
   try {
     // Check if required environment variables are available
     if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
@@ -13,12 +11,17 @@ export async function createServerClient(cookieStore: ReturnType<typeof cookies>
       throw new Error("Application configuration error: Missing Supabase credentials")
     }
 
-    return createSupabaseServerClient<Database>(
+    const cookieStore = cookies()
+
+    return createServerClientSupabase<Database>(
       process.env.NEXT_PUBLIC_SUPABASE_URL,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
       {
         cookies: {
-          get: (name) => cookieStore.get(name)?.value,
+          get: (name) => {
+            const cookie = cookieStore.get(name)
+            return cookie?.value
+          },
           set: (name, value, options) => {
             cookieStore.set(name, value, options)
           },
@@ -34,5 +37,5 @@ export async function createServerClient(cookieStore: ReturnType<typeof cookies>
   }
 }
 
-// Also export as createClient for compatibility
-export const createClient = createServerClient
+// Also export as createServerClient for compatibility
+export const createServerClient = createClient
