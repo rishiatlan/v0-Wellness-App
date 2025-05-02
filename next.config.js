@@ -5,11 +5,24 @@ const nextConfig = {
 
   // Fix image handling to restore avatars
   images: {
-    domains: ["mqvcdyzqegzqfwvesoiz.supabase.co", "supabase.co", "localhost", "vercel.app", "vercel.com"],
+    domains: [
+      "mqvcdyzqegzqfwvesoiz.supabase.co",
+      "supabase.co",
+      "localhost",
+      "vercel.app",
+      "vercel.com",
+      "www.gravatar.com",
+      "gravatar.com",
+    ],
     remotePatterns: [
       {
         protocol: "https",
         hostname: "**.supabase.co",
+        pathname: "/**",
+      },
+      {
+        protocol: "https",
+        hostname: "**.gravatar.com",
         pathname: "/**",
       },
     ],
@@ -52,7 +65,7 @@ const nextConfig = {
           {
             key: "Content-Security-Policy",
             value:
-              "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://v0-spring-wellness-app.vercel.app; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co; font-src 'self' data:; connect-src 'self' https://*.supabase.co https://v0-spring-wellness-app.vercel.app; frame-src 'self'; object-src 'none';",
+              "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://v0-spring-wellness-app.vercel.app; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co https://*.gravatar.com; font-src 'self' data:; connect-src 'self' https://*.supabase.co https://v0-spring-wellness-app.vercel.app; frame-src 'self'; object-src 'none';",
           },
         ],
       },

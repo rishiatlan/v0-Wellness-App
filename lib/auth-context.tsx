@@ -31,7 +31,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
-  const [authListener, setAuthListener] = useState<{ subscription: { unsubscribe: () => void } } | null>(null)
+  const [authListenerInitialized, setAuthListenerInitialized] = useState(false)
 
   // Function to refresh the session
   const refreshSession = useCallback(async () => {
@@ -66,30 +66,48 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Initialize auth state
   useEffect(() => {
-    // Set loading to true when the component mounts
-    setLoading(true)
+    let isMounted = true
+    let authListener: { subscription: { unsubscribe: () => void } } | null = null
 
-    // Get the initial session
-    refreshSession()
+    const initializeAuth = async () => {
+      if (authListenerInitialized) return
 
-    // Subscribe to auth changes
-    const { data } = supabase.auth.onAuthStateChange((event, newSession) => {
-      console.log("Auth state changed:", event)
-      setSession(newSession)
-      setUser(newSession?.user ?? null)
-      setLoading(false)
-    })
+      try {
+        // Get the initial session
+        await refreshSession()
 
-    // Store the listener
-    setAuthListener(data)
+        if (!isMounted) return
+
+        // Subscribe to auth changes
+        const { data } = supabase.auth.onAuthStateChange((event, newSession) => {
+          if (!isMounted) return
+
+          console.log("Auth state changed:", event)
+          setSession(newSession)
+          setUser(newSession?.user ?? null)
+          setLoading(false)
+        })
+
+        authListener = data
+        setAuthListenerInitialized(true)
+      } catch (err) {
+        console.error("Error initializing auth:", err)
+        if (isMounted) {
+          setLoading(false)
+        }
+      }
+    }
+
+    initializeAuth()
 
     // Clean up the subscription
     return () => {
-      if (data && data.subscription) {
-        data.subscription.unsubscribe()
+      isMounted = false
+      if (authListener && authListener.subscription) {
+        authListener.subscription.unsubscribe()
       }
     }
-  }, [refreshSession]) // Only depend on refreshSession
+  }, [refreshSession, authListenerInitialized])
 
   // Memoize the context value to prevent unnecessary re-renders
   const value = useMemo(

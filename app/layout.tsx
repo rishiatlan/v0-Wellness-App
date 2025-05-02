@@ -10,7 +10,7 @@ import Header from "@/components/header"
 import Footer from "@/components/footer"
 import { AssetPreloader } from "@/components/asset-preloader"
 import { AppInitializer } from "@/components/app-initializer"
-import { APP_VERSION, APP_URL } from "@/lib/env-vars"
+import { APP_VERSION } from "@/lib/env-vars"
 import { ErrorBoundary } from "@/components/error-boundary"
 import { PerformanceMonitor } from "@/components/performance-monitor"
 import ProtectedLayout from "./protected-layout"
@@ -60,14 +60,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           href={process.env.NEXT_PUBLIC_SUPABASE_URL || "https://mqvcdyzqegzqfwvesoiz.supabase.co"}
         />
 
-        {/* Fix image preloading issues with crossOrigin */}
-        <link rel="preload" href="/wellness.png" as="image" crossOrigin="anonymous" />
+        {/* Add preconnect for Gravatar */}
+        <link rel="preconnect" href="https://www.gravatar.com" />
 
-        {/* Preload other common assets */}
-        <link rel="preload" href="/abstract-geometric-logo.png" as="image" crossOrigin="anonymous" />
-
-        {/* Add canonical URL */}
-        <link rel="canonical" href={APP_URL} />
+        {/* Only preload critical images */}
+        <link rel="preload" as="image" href="/wellness-logo.png" fetchPriority="high" />
       </head>
       <body className={`${inter.className} min-h-screen flex flex-col`}>
         <PerformanceMonitor />
