@@ -12,8 +12,9 @@ const nextConfig = {
     ],
     unoptimized: true,
   },
+  // Remove optimizeCss to avoid the critters issue
   experimental: {
-    optimizeCss: true,
+    // optimizeCss: true, // Removing this line
   },
   eslint: {
     ignoreDuringBuilds: true,
